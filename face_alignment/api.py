@@ -70,6 +70,7 @@ class FaceAlignment:
 
         # Initialise the face alignemnt networks
         self.face_alignment_net = FAN(network_size)
+
         if landmarks_type == LandmarksType._2D:
             network_name = '2DFAN-' + str(network_size)
         else:

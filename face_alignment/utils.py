@@ -2,10 +2,19 @@ from __future__ import print_function
 import os
 import sys
 import time
-import torch
+from enum import Enum
 import math
+
+import torch
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+import scipy.misc
+
+class InputType(Enum):
+    image = 0
+    label = 1
+    heatmap = 2
 
 
 def _gaussian(
@@ -52,8 +61,7 @@ def draw_gaussian(image, point, sigma):
     image[image > 1] = 1
     return image
 
-
-def transform(point, center, scale, resolution, invert=False):
+def getTransform(center, scale, resolution, rotate=0):
     """Generate and affine transformation matrix.
 
     Given a set of points, a center, a scale and a targer resolution, the
@@ -61,8 +69,49 @@ def transform(point, center, scale, resolution, invert=False):
     it will produce the inverse transformation.
 
     Arguments:
-        point {torch.tensor} -- the input 2D point
         center {torch.tensor or numpy.array} -- the center around which to perform the transformations
+        scale {float} -- the scale of the face/object
+        resolution {float} -- the output resolution
+        rotate {float} -- amount to rotote point
+
+    Keyword Arguments:
+        invert {bool} -- define wherever the function should produce the direct or the
+        inverse transformation matrix (default: {False})
+    """
+    h = 200.0 * scale
+    t = torch.eye(3)
+    t[0, 0] = resolution / h
+    t[1, 1] = resolution / h
+    t[0, 2] = resolution * (-center[0] / h + 0.5)
+    t[1, 2] = resolution * (-center[1] / h + 0.5)
+
+    if not rotate == 0:
+        rotate = -rotate  # To match direction of rotation from cropping
+        rot_mat = torch.eye(3)
+        rot_rad = rotate * np.pi / 180
+        sn, cs = torch.sin(rot_rad), torch.cos(rot_rad)
+        rot_mat[:2, :2] = torch.tensor([[cs, -sn],
+                                        [sn, cs]])
+
+        # Need to rotate around center
+        t_mat = torch.eye(3)
+        t_mat[:2, 2] = -resolution / 2
+        t_inv = t_mat.clone()
+        t_inv[:2, 2] *= -1
+        t = torch.matmul(t_inv, torch.matmul(rot_mat, torch.matmul(t_mat, t)))
+
+    return t
+
+def transform(point, transform, invert=False):
+    """apply affine transformation matrix to point.
+
+    Given a set of points, a center, a scale and a targer resolution, the
+    function generates and affine transformation matrix. If invert is ``True``
+    it will produce the inverse transformation.
+
+    Arguments:
+        point {torch.tensor} -- the input 2D point
+        transform {torch.tensor or numpy.array} -- transformations to apply
         scale {float} -- the scale of the face/object
         resolution {float} -- the output resolution
 
@@ -74,22 +123,54 @@ def transform(point, center, scale, resolution, invert=False):
     _pt[0] = point[0]
     _pt[1] = point[1]
 
-    h = 200.0 * scale
-    t = torch.eye(3)
-    t[0, 0] = resolution / h
-    t[1, 1] = resolution / h
-    t[0, 2] = resolution * (-center[0] / h + 0.5)
-    t[1, 2] = resolution * (-center[1] / h + 0.5)
-
     if invert:
-        t = torch.inverse(t)
+        transform = torch.inverse(transform)
 
-    new_point = (torch.matmul(t, _pt))[0:2]
+    new_point = (torch.matmul(transform, _pt))
 
-    return new_point.int()
+    if len(point) == 3:
+        new_point[2] = point[2]
+    else:
+        new_point = new_point[0:2]
 
+    return new_point.int() #+ 1
 
-def crop(image, center, scale, resolution=256.0):
+# def transform(point, center, scale, resolution, invert=False):
+#     """apply affine transformation matrix to point.
+#
+#     Given a set of points, a center, a scale and a targer resolution, the
+#     function generates and affine transformation matrix. If invert is ``True``
+#     it will produce the inverse transformation.
+#
+#     Arguments:
+#         point {torch.tensor} -- the input 2D point
+#         transform {torch.tensor or numpy.array} -- transformations to apply
+#         scale {float} -- the scale of the face/object
+#         resolution {float} -- the output resolution
+#
+#     Keyword Arguments:
+#         invert {bool} -- define wherever the function should produce the direct or the
+#         inverse transformation matrix (default: {False})
+#     """
+#     _pt = torch.ones(3)
+#     _pt[0] = point[0]
+#     _pt[1] = point[1]
+#
+#     h = 200.0 * scale
+#     t = torch.eye(3)
+#     t[0, 0] = resolution / h
+#     t[1, 1] = resolution / h
+#     t[0, 2] = resolution * (-center[0] / h + 0.5)
+#     t[1, 2] = resolution * (-center[1] / h + 0.5)
+#
+#     if invert:
+#         t = torch.inverse(t)
+#
+#     new_point = (torch.matmul(t, _pt))[0:2]
+#
+#     return new_point.int()
+
+def crop(image, center, scale, resolution=256.0, rotate=0):
     """Center crops an image or set of heatmaps
 
     Arguments:
@@ -104,9 +185,23 @@ def crop(image, center, scale, resolution=256.0):
         [type] -- [description]
     """  # Crop around the center point
     """ Crops the image around the center. Input is expected to be an np.ndarray """
-    ul = transform([1, 1], center, scale, resolution, True)
-    br = transform([resolution, resolution], center, scale, resolution, True)
-    # pad = math.ceil(torch.norm((ul - br).float()) / 2.0 - (br[0] - ul[0]) / 2.0)
+    transul = getTransform(center, scale, resolution)
+    ul = transform([1, 1], transul, True)
+
+    transbr = getTransform(center, scale, resolution)
+    br = transform([resolution, resolution], transbr, True)
+    # ul = transform([1, 1], center, scale, resolution, True)
+    # br = transform([resolution, resolution], center, scale, resolution, True)
+
+    pad = math.ceil(torch.norm((ul - br).float()) / 2.0 - (br[0] - ul[0]) / 2.0)
+    if rotate is not 0:
+        ul -= pad
+        br += pad
+
+
+    # plt.imshow(image)
+    # plt.show()
+
     if image.ndim > 2:
         newDim = np.array([br[1] - ul[1], br[0] - ul[0],
                            image.shape[2]], dtype=np.int32)
@@ -114,6 +209,10 @@ def crop(image, center, scale, resolution=256.0):
     else:
         newDim = np.array([br[1] - ul[1], br[0] - ul[0]], dtype=np.int)
         newImg = np.zeros(newDim, dtype=np.uint8)
+
+    # plt.imshow(newImg)
+    # plt.show()
+
     ht = image.shape[0]
     wd = image.shape[1]
     newX = np.array(
@@ -124,8 +223,24 @@ def crop(image, center, scale, resolution=256.0):
     oldY = np.array([max(1, ul[1] + 1), min(br[1], ht)], dtype=np.int32)
     newImg[newY[0] - 1:newY[1], newX[0] - 1:newX[1]
            ] = image[oldY[0] - 1:oldY[1], oldX[0] - 1:oldX[1], :]
+
+
+    # plt.imshow(newImg)
+    # plt.show()
+    if rotate is not 0:
+        # Remove padding
+        newImg = scipy.misc.imrotate(newImg, rotate)
+        newImg = newImg[pad:-pad, pad:-pad]
+
+        # plt.imshow(newImg)
+        # plt.show()
+
     newImg = cv2.resize(newImg, dsize=(int(resolution), int(resolution)),
                         interpolation=cv2.INTER_LINEAR)
+
+    # plt.imshow(newImg)
+    # plt.show()
+
     return newImg
 
 
@@ -162,15 +277,15 @@ def get_preds_fromhm(hm, center=None, scale=None):
 
     preds_orig = torch.zeros(preds.size())
     if center is not None and scale is not None:
+        transMat = getTransform(center, scale, hm.size(2))
         for i in range(hm.size(0)):
             for j in range(hm.size(1)):
-                preds_orig[i, j] = transform(
-                    preds[i, j], center, scale, hm.size(2), True)
+                preds_orig[i, j] = transform(preds[i, j], transMat, True)
 
     return preds, preds_orig
 
 
-def shuffle_lr(parts, pairs=None):
+def shuffle_lr(parts, pairs=None, width=None):
     """Shuffle the points left-right according to the axis of symmetry
     of the object.
 
@@ -187,8 +302,12 @@ def shuffle_lr(parts, pairs=None):
                  34, 33, 32, 31, 45, 44, 43, 42, 47, 46, 39, 38, 37, 36, 41,
                  40, 54, 53, 52, 51, 50, 49, 48, 59, 58, 57, 56, 55, 64, 63,
                  62, 61, 60, 67, 66, 65]
-    if parts.ndimension() == 3:
+
+    if parts.ndimension() == 2 or parts.ndimension() == 3:
         parts = parts[pairs, ...]
+        if width is not None:
+            # flip horizontal on landmarks
+            parts[:, 0] = width - parts[:, 0]
     else:
         parts = parts[:, pairs, ...]
 
