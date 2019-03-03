@@ -15,11 +15,18 @@ import time
 
 class FANDetector:
     def __init__(self):
-        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda', flip_input=True)
+        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True)
+        self.fa
 
     def detect(self, image):
         #landmarks must be float32, as client expects
-        return self.fa.get_landmarks(image)[-1].astype(np.float32)
+
+        start = time.time()
+        pred = self.fa.get_landmarks(image)[-1].astype(np.float32)
+        end = time.time()
+
+        print("Time to process image {}".format(end-start))
+        return pred
 
 
 class DetectorSession(socketserver.BaseRequestHandler):
