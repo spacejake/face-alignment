@@ -13,7 +13,7 @@ import torch
 import torch.utils.data as data
 
 from utils.imutils import *
-from common import Split
+from common import Split, Target
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
 
 '''
@@ -22,7 +22,7 @@ Modified derivative of https://github.com/hzh8311/pyhowfar
 
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split=Split.test):
+    def __init__(self, args, split=Split.train):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
@@ -65,10 +65,10 @@ class W300LP(data.Dataset):
         return self.total
 
     def __getitem__(self, index):
-        inp, heatmap, pts, c, s = self.generateSampleFace(index)
+        inp, heatmap, pts, center, scale = self.generateSampleFace(index)
 
         # if self.is_train:
-        return inp, heatmap, pts
+        return inp, Target(heatmap, pts, center, scale)
         # else:
         #     meta = {'index': index, 'center': c, 'scale': s, 'pts': pts,}
         #     return inp, heatmap, pts, meta
@@ -142,13 +142,13 @@ class W300LP(data.Dataset):
                     mean += img.view(img.size(0), -1).mean(1)
                     std += img.view(img.size(0), -1).std(1)
 
-            mean /= self.total
-            std /= self.total
-            ms = {
-                'mean': mean,
-                'std': std,
-            }
-            torch.save(ms, meanstd_file)
+                mean /= self.total
+                std /= self.total
+                ms = {
+                    'mean': mean,
+                    'std': std,
+                }
+                torch.save(ms, meanstd_file)
         if self.is_train:
             print('\tMean: %.4f, %.4f, %.4f' % (ms['mean'][0], ms['mean'][1], ms['mean'][2]))
             print('\tStd:  %.4f, %.4f, %.4f' % (ms['std'][0], ms['std'][1], ms['std'][2]))
@@ -158,14 +158,14 @@ if __name__=="__main__":
     import utils.opts as opts
     args = opts.argparser()
 
-    dataset = W300LP(args, Split.test)
-    # dataset = W300LP(args, Split.train)
+    # dataset = W300LP(args, Split.test)
+    dataset = W300LP(args, Split.train)
     crop_win = None
     for i in range(dataset.__len__()):
-        input, target, tpts = dataset.__getitem__(i)
-        show_joints(input, tpts)
-        show_joints3D(tpts)
-        show_heatmap(target.unsqueeze(0))
+        input, target = dataset.__getitem__(i)
+        show_joints(input, target.pts)
+        show_joints3D(target.pts)
+        show_heatmap(target.heatmap.unsqueeze(0))
 
         plt.pause(0.5)
         plt.draw()

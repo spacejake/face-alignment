@@ -41,6 +41,7 @@ def argparser():
     P.add_argument('--flip', action='store_true', help='Flip input image')
     P.add_argument(
         '--start-epoch', default=0, type=int, help='manual epoch number (useful on restarts)')
+    P.add_argument('--device', type=str, default='cuda:0', help='device to load and run model')
     args = P.parse_args()
 
     return args
