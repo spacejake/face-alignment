@@ -147,7 +147,7 @@ class FaceAlignment:
             center = torch.FloatTensor(
                 [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
             center[1] = center[1] - (d[3] - d[1]) * 0.12
-            scale = (d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale
+            scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
 
             inp = crop(image, center, scale)
             inp = torch.from_numpy(inp.transpose(
@@ -162,7 +162,7 @@ class FaceAlignment:
                             [-1].detach(), is_label=True)
             out = out.cpu()
 
-            pts, pts_img = get_preds_fromhm(out, center, scale)
+            pts, pts_img = get_preds_fromhm(out, center.unsqueeze(0), scale.unsqueeze(0))
             pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
 
             if self.landmarks_type == LandmarksType._3D:

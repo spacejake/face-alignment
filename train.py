@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Agg')
 from progress.bar import Bar
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 import torch
 import torch.nn as nn
@@ -19,13 +20,13 @@ from face_alignment.api import NetworkSize
 from face_alignment.models import FAN, ResNetDepth
 from face_alignment.utils import *
 
-from datasets import W300LP
-from datasets.common import Split
+from datasets.W300LP import W300LP
+from datasets.common import Split, Target
 
 
 from utils.logger import Logger, savefig
-from utils.imutils import batch_with_heatmap
-from utils.evaluation import accuracy, AverageMeter, final_preds, calc_metrics, calc_dists
+from utils.imutils import batch_with_heatmap, show_joints3D, show_heatmap
+from utils.evaluation import accuracy, AverageMeter, calc_metrics, calc_dists, accuracy_points
 from utils.misc import adjust_learning_rate, save_checkpoint, save_pred
 import opts
 
@@ -55,12 +56,13 @@ class Criterion(NamedTuple):
     pts: torch.nn.Module
 
 def get_loader(data):
+    dataset = os.path.basename(os.path.normpath(data))
     return {
         '300W_LP': W300LP,
         # 'LS3D-W/300VW-3D': VW300,
         # 'AFLW2000': AFLW2000,
         # 'LS3D-W': LS3DW,
-    }[data[5:]]
+    }[dataset]
 
 def main(args):
     global best_acc
@@ -103,82 +105,84 @@ def main(args):
     title = args.checkpoint.split('/')[-1] + ' on ' + args.data.split('/')[-1]
     Loader = get_loader(args.data)
 
-    val_loader = torch.utils.data.DataLoader(
-        Loader(args, Split.test),
-        batch_size=args.val_batch,
-        shuffle=False,
-        num_workers=args.workers,
-        pin_memory=True)
+    # val_loader = torch.utils.data.DataLoader(
+    #     Loader(args, 'test'),
+    #     batch_size=args.val_batch,
+    #     shuffle=False,
+    #     num_workers=args.workers,
+    #     pin_memory=True)
 
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> Loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_acc = checkpoint['best_acc']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> Loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
-            logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
-    else:
-        logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Valid Loss', 'Train Acc', 'Val Acc', 'AUC'])
+    # if args.resume:
+    #     if os.path.isfile(args.resume):
+    #         print("=> Loading checkpoint '{}'".format(args.resume))
+    #         checkpoint = torch.load(args.resume)
+    #         args.start_epoch = checkpoint['epoch']
+    #         best_acc = checkpoint['best_acc']
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer'])
+    #         print("=> Loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
+    #         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
+    #     else:
+    #         print("=> no checkpoint found at '{}'".format(args.resume))
+    # else:
+    #     logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
+    #     logger.set_names(['Epoch', 'LR', 'Train Loss', 'Valid Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     cudnn.benchmark = True
-    print('=> Total params: %.2fM' % (sum(p.numel() for p in model.parameters()) / (1024. * 1024)))
+    # print('=> Total params: %.2fM' % (sum(p.numel() for p in model.parameters()) / (1024. * 1024)))
 
-    if args.evaluation:
-        print('=> Evaluation only')
-        D = args.data.split('/')[-1]
-        save_dir = os.path.join(args.checkpoint, D)
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        loss, acc, predictions, auc = validate(val_loader, model, criterion, args.netType,
-                                                        args.debug, args.flip, device=device)
-        save_pred(predictions, checkpoint=save_dir)
-        return
+    # if args.evaluation:
+    #     print('=> Evaluation only')
+    #     D = args.data.split('/')[-1]
+    #     save_dir = os.path.join(args.checkpoint, D)
+    #     if not os.path.exists(save_dir):
+    #         os.makedirs(save_dir)
+    #     loss, acc, predictions, auc = validate(val_loader, model, criterion, args.netType,
+    #                                                     args.debug, args.flip, device=device)
+    #     save_pred(predictions, checkpoint=save_dir)
+    #     return
 
     train_loader = torch.utils.data.DataLoader(
-        Loader(args, Split.train),
+        Loader(args, split='train'),
         batch_size=args.train_batch,
         shuffle=True,
         num_workers=args.workers,
         pin_memory=True)
     lr = args.lr
+
     for epoch in range(args.start_epoch, args.epochs):
         lr = adjust_learning_rate(optimizer, epoch, lr, args.schedule, args.gamma)
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
         train_loss, train_acc = train(train_loader, model, criterion, optimizer, args.netType,
                                       args.debug, args.flip, device=device)
+
         # do not save predictions in model file
-        valid_loss, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
-                                                      args.debug, args.flip, device=device)
+        # valid_loss, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
+        #                                               args.debug, args.flip, device=device)
+        #
+        # logger.append([int(epoch + 1), lr, train_loss, valid_loss, train_acc, valid_acc, valid_auc])
+        #
+        # is_best = valid_auc >= best_auc
+        # best_auc = max(valid_auc, best_auc)
+        # save_checkpoint(
+        #     {
+        #         'epoch': epoch + 1,
+        #         'netType': args.netType,
+        #         'state_dict': model.FAN.state_dict(),
+        #         'best_acc': best_auc,
+        #         'optimizer': optimizer.state_dict(),
+        #     },
+        #     is_best,
+        #     predictions,
+        #     checkpoint=args.checkpoint)
 
-        logger.append([int(epoch + 1), lr, train_loss, valid_loss, train_acc, valid_acc, valid_auc])
-
-        is_best = valid_auc >= best_auc
-        best_auc = max(valid_auc, best_auc)
-        save_checkpoint(
-            {
-                'epoch': epoch + 1,
-                'netType': args.netType,
-                'state_dict': model.FAN.state_dict(),
-                'best_acc': best_auc,
-                'optimizer': optimizer.state_dict(),
-            },
-            is_best,
-            predictions,
-            checkpoint=args.checkpoint)
-
-    logger.close()
-    logger.plot(['AUC'])
+    # logger.close()
+    # logger.plot(['AUC'])
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
 
-def train(loader, model, criterion, optimizer, netType, device, debug=False, flip=False):
+def train(loader, model, criterion, optimizer, netType, debug=False, flip=False, device='cuda:0'):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -192,7 +196,9 @@ def train(loader, model, criterion, optimizer, netType, device, debug=False, fli
 
     gt_win, pred_win = None, None
     bar = Bar('Training', max=len(loader))
-    for i, (inputs, target) in enumerate(loader):
+    for loader_idx, (inputs, label) in enumerate(loader):
+
+        target = Target._make(label)
         data_time.update(time.time() - end)
 
         input_var = torch.autograd.Variable(inputs.to(device))
@@ -223,24 +229,26 @@ def train(loader, model, criterion, optimizer, netType, device, debug=False, fli
         out_hm = out_hm.cpu()
 
         pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
-        pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
+        pts = pts * 4
 
         # Input for 3D Regressor
         # TODO: Problem, no back propagation to FAN Model, basically training them separately
         # if self.landmarks_type == LandmarksType._3D:
-        heatmaps = np.zeros((68, 256, 256), dtype=np.float32)
+        heatmaps = np.zeros((pts.size(0), 68, 256, 256), dtype=np.float32)
         tpts = pts.clone()
-        for i in range(68):
-            if tpts[i, 0] > 0:
-                heatmaps[i] = draw_gaussian(
-                    heatmaps[i], tpts[i], 2)
-        heatmaps = torch.from_numpy(heatmaps).unsqueeze_(0)
+        for b in range(pts.size(0)):
+            for n in range(68):
+                if tpts[b, n, 0] > 0:
+                    heatmaps[b, n] = draw_gaussian(
+                        heatmaps[b, n], tpts[b, n], 2)
+        heatmaps = torch.from_numpy(heatmaps)
         heatmaps_var = torch.autograd.Variable(heatmaps.to(device))
 
-        depth_pred = model.Depth(
-            torch.cat((input_var, heatmaps_var), 1)).data.cpu().view(68, 1)
-        pts_img = torch.cat(
-            (pts_img, depth_pred * (1.0 / (256.0 / (200.0 * target.scale)))), 1)
+        depth_inp = torch.cat((input_var, heatmaps_var), 1)
+        depth_pred = model.Depth(depth_inp).data.cpu().unsqueeze(2)
+        tscale = target.scale.unsqueeze(1).unsqueeze(2)
+        depth_pred_scaled = depth_pred * (1.0 / (256.0 / (200.0 * tscale)))
+        pts_img = torch.cat((pts_img, depth_pred_scaled), 2)
 
         # Intermediate supervision
         loss = 0
@@ -252,7 +260,7 @@ def train(loader, model, criterion, optimizer, netType, device, debug=False, fli
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
-        losses.update(loss.data[0], inputs.size(0))
+        losses.update(loss.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         optimizer.zero_grad()
@@ -262,7 +270,7 @@ def train(loader, model, criterion, optimizer, netType, device, debug=False, fli
         batch_time.update(time.time() - end)
         end = time.time()
         bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
-            batch=i + 1,
+            batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
             bt=batch_time.val,
@@ -271,12 +279,25 @@ def train(loader, model, criterion, optimizer, netType, device, debug=False, fli
             loss=losses.avg,
             acc=acces.avg)
         bar.next()
+        print('({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
+            batch=loader_idx + 1,
+            size=len(loader),
+            data=data_time.val,
+            bt=batch_time.val,
+            total=bar.elapsed_td,
+            eta=bar.eta_td,
+            loss=losses.avg,
+            acc=acces.avg))
 
+        show_joints3D(pts_img.detach()[0])
+        show_heatmap(out_hm.detach()[0].unsqueeze(0))
+        plt.pause(0.5)
+        plt.draw()
     bar.finish()
 
     return losses.avg, acces.avg
 
-
+"""
 def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -372,6 +393,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     auc = calc_metrics(all_dists) # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
     return losses.avg, acces.avg, predictions, auc
+"""
+
 
 if __name__ == '__main__':
     args = opts.argparser()

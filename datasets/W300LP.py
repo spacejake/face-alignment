@@ -20,9 +20,18 @@ from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
 Modified derivative of https://github.com/hzh8311/pyhowfar
 '''
 
+def get_loader(data):
+    dataset = os.path.basename(os.path.normpath(data))
+    return {
+        '300W_LP': W300LP,
+        # 'LS3D-W/300VW-3D': VW300,
+        # 'AFLW2000': AFLW2000,
+        # 'LS3D-W': LS3DW,
+    }[dataset]
+
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split=Split.train):
+    def __init__(self, args, split='train'):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
@@ -35,8 +44,8 @@ class W300LP(data.Dataset):
             self.lmk_dir = os.path.join(self.img_dir, 'landmarks3d')
 
         # self.anno = anno
-        self.split = split
-        self.is_train = True if self.split == Split.train else False
+        self.split = Split(split)
+        self.is_train = self.split is Split.train
         self.anno = self._getDataFaces(self.is_train)
         self.total = len(self.anno)
         self.mean, self.std = self._comput_mean()
@@ -126,7 +135,7 @@ class W300LP(data.Dataset):
         return inp, heatmap, pts, c, s
 
     def _comput_mean(self):
-        meanstd_file = './data/300W_LP/mean.pth.tar'
+        meanstd_file = os.path.join(self.img_dir, 'mean.pth.tar')
         if os.path.isfile(meanstd_file):
             ms = torch.load(meanstd_file)
         else:
@@ -159,13 +168,20 @@ if __name__=="__main__":
     args = opts.argparser()
 
     # dataset = W300LP(args, Split.test)
-    dataset = W300LP(args, Split.train)
+    datasetLoader = get_loader(args.data)
     crop_win = None
-    for i in range(dataset.__len__()):
-        input, target = dataset.__getitem__(i)
-        show_joints(input, target.pts)
-        show_joints3D(target.pts)
-        show_heatmap(target.heatmap.unsqueeze(0))
+    loader = torch.utils.data.DataLoader(
+        datasetLoader(args, 'train'),
+        batch_size=1,
+        shuffle=True,
+        num_workers=args.workers,
+        pin_memory=True)
+    for i, data in enumerate(loader):
+        input, label = data
+        target = Target._make(label)
+        show_joints(input.squeeze(0), target.pts.squeeze(0))
+        show_joints3D(target.pts.squeeze(0))
+        show_heatmap(target.heatmap)
 
         plt.pause(0.5)
         plt.draw()

@@ -277,10 +277,11 @@ def get_preds_fromhm(hm, center=None, scale=None):
 
     preds_orig = torch.zeros(preds.size())
     if center is not None and scale is not None:
-        transMat = getTransform(center, scale, hm.size(2))
-        for i in range(hm.size(0)):
-            for j in range(hm.size(1)):
-                preds_orig[i, j] = transform(preds[i, j], transMat, True)
+        for b in range(center.size(0)):
+            transMat = getTransform(center[b], scale[b], hm.size(2))
+            for i in range(hm.size(0)):
+                for j in range(hm.size(1)):
+                    preds_orig[i, j] = transform(preds[i, j], transMat, True)
 
     return preds, preds_orig
 
