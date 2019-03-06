@@ -10,7 +10,8 @@ class Split(Enum):
     test = 'test'
 
 class Target(NamedTuple):
-    heatmap: torch.tensor
+    heatmap64: torch.tensor
+    heatmap256: torch.tensor
     pts:  torch.tensor
     center: torch.tensor
     scale: torch.tensor

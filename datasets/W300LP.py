@@ -15,6 +15,7 @@ import torch.utils.data as data
 from utils.imutils import *
 from common import Split, Target
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
+from evaluation import get_preds
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -74,10 +75,10 @@ class W300LP(data.Dataset):
         return self.total
 
     def __getitem__(self, index):
-        inp, heatmap, pts, center, scale = self.generateSampleFace(index)
+        inp, heatmap64, heatmap256, pts, center, scale = self.generateSampleFace(index)
 
         # if self.is_train:
-        return inp, Target(heatmap, pts, center, scale)
+        return inp, Target(heatmap64, heatmap256, pts, center, scale)
         # else:
         #     meta = {'index': index, 'center': c, 'scale': s, 'pts': pts,}
         #     return inp, heatmap, pts, meta
@@ -114,25 +115,27 @@ class W300LP(data.Dataset):
 
         inp = im_to_torch(crop(im_to_numpy(img), c, s, 256, rotate=r))
         # Transform Points
+        # 256x256 GT Heatmap and Points
         pts = raw_pts.clone()
+        heatmap256 = torch.zeros(self.nParts, 256, 256)
         ptsTransMat = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i] + 1, ptsTransMat)
-
+                heatmap256[i] = draw_labelmap(heatmap256[i], pts[i] - 1, sigma=1)
 
         # inp = color_normalize(inp, self.mean, self.std)
 
-
+        # 64x64 Intermediate Heatmap
         tpts = raw_pts.clone()
-        heatmap = torch.zeros(self.nParts, 64, 64)
+        heatmap64 = torch.zeros(self.nParts, 64, 64)
         transMat = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i, 0:2] = transform(tpts[i, 0:2] + 1, transMat)
-                heatmap[i] = draw_labelmap(heatmap[i], tpts[i] - 1, sigma=1)
+                heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
-        return inp, heatmap, pts, c, s
+        return inp, heatmap64, heatmap256, pts, c, s
 
     def _comput_mean(self):
         meanstd_file = os.path.join(self.img_dir, 'mean.pth.tar')
@@ -181,7 +184,10 @@ if __name__=="__main__":
         target = Target._make(label)
         show_joints(input.squeeze(0), target.pts.squeeze(0))
         show_joints3D(target.pts.squeeze(0))
-        show_heatmap(target.heatmap)
+        show_heatmap(target.heatmap64)
+        show_heatmap(target.heatmap256)
+        test_hmpred = get_preds(target.heatmap256)
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         plt.pause(0.5)
         plt.draw()

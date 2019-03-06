@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randint
 
-from .misc import *
+from misc import *
 # from .transforms import transform, transform_preds
 
 __all__ = ['accuracy', 'AverageMeter']
@@ -106,6 +106,7 @@ def accuracy(output, target, idxs, thr=0.08):
     '''
     preds = get_preds(output)
     gts = get_preds(target)
+    accuracy_points(preds, gts, idxs, thr)
 
 def accuracy_points(pred, target, idxs, thr=0.08):
     ''' Calculate accuracy according to NME, using x,y locations

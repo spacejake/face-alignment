@@ -32,7 +32,7 @@ def _gaussian(
         sigma_vert = sigma
     center_x = mean_horz * width + 0.5
     center_y = mean_vert * height + 0.5
-    gauss = np.empty((height, width), dtype=np.float32)
+    gauss = torch.zeros((height, width), dtype=torch.float32)
     # generate kernel
     for i in range(height):
         for j in range(width):
@@ -45,8 +45,8 @@ def _gaussian(
 
 def draw_gaussian(image, point, sigma):
     # Check if the gaussian is inside
-    ul = [math.floor(point[0] - 3 * sigma), math.floor(point[1] - 3 * sigma)]
-    br = [math.floor(point[0] + 3 * sigma), math.floor(point[1] + 3 * sigma)]
+    ul = [torch.floor(point[0] - 3 * sigma), torch.floor(point[1] - 3 * sigma)]
+    br = [torch.floor(point[0] + 3 * sigma), torch.floor(point[1] + 3 * sigma)]
     if (ul[0] > image.shape[1] or ul[1] > image.shape[0] or br[0] < 1 or br[1] < 1):
         return image
     size = 6 * sigma + 1
