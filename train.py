@@ -320,8 +320,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             losslmk=losseslmk.avg,
             acc=acces.avg))
 
-        if (loader_idx+1) % 50 == 0:
-            break
+        # if (loader_idx+1) % 50 == 0:
+        #     break
 
         # save every once and awhile
         if (loader_idx+1) % 1000 == 0:
