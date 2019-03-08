@@ -12,10 +12,10 @@ from mpl_toolkits.mplot3d import Axes3D
 import torch
 import torch.utils.data as data
 
-from utils.imutils import *
-from common import Split, Target
+from .common import Split, Target
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
-from evaluation import get_preds
+from face_alignment.util.imutils import *
+from face_alignment.util.evaluation import get_preds
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -167,7 +167,8 @@ class W300LP(data.Dataset):
         return ms['mean'], ms['std']
 
 if __name__=="__main__":
-    import utils.opts as opts
+    import face_alignment.util.opts as opts
+
     args = opts.argparser()
 
     # dataset = W300LP(args, Split.test)

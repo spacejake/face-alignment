@@ -8,7 +8,7 @@ except BaseException:
     import urllib as request_file
 
 from ..core import FaceDetector
-from ...utils import appdata_dir
+from ...util import appdata_dir
 
 
 class DlibDetector(FaceDetector):

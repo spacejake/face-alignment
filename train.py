@@ -20,15 +20,15 @@ from face_alignment.api import NetworkSize
 from face_alignment.models import FAN, ResNetDepth
 from face_alignment.utils import *
 
-from datasets.W300LP import W300LP
-from datasets.common import Split, Target
+from face_alignment.datasets.W300LP import W300LP
+from face_alignment.datasets.common import Target
 
 
-from utils.logger import Logger, savefig
-from utils.imutils import batch_with_heatmap, show_joints3D, show_heatmap
-from utils.evaluation import accuracy, AverageMeter, calc_metrics, calc_dists, accuracy_points, get_preds
-from utils.misc import adjust_learning_rate, save_checkpoint, save_pred
-import opts
+from face_alignment.util.logger import Logger, savefig
+from face_alignment.util.imutils import show_joints3D, show_heatmap
+from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
+from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
+import face_alignment.util.opts as opts
 
 model_names = sorted(
     name for name in models.__dict__

@@ -1,5 +1,5 @@
 import unittest
-from face_alignment.utils import *
+from face_alignment.util import *
 import numpy as np
 import torch
 

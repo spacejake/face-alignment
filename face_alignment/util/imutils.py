@@ -7,8 +7,9 @@ import scipy.misc
 import skimage.io as skio
 import os
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
-from misc import *
+from .misc import *
 
 def im_to_numpy(img):
     img = to_numpy(img)
