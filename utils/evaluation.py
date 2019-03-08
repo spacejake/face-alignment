@@ -63,7 +63,7 @@ def calc_metrics(dists, path='', category=''):
     auc = round(np.sum(axes2[:70]) / .7, 2)
 
     if path:
-        label = '{}({}) : {}'.format(path.split('/')[2], category, str(auc))
+        label = '({}) : {}'.format(category, str(auc))
         plt.xlim(0, 7)
         plt.ylim(0, 100)
         plt.yticks(np.arange(0, 110, 10))

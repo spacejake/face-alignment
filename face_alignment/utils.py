@@ -32,7 +32,7 @@ def _gaussian(
         sigma_vert = sigma
     center_x = mean_horz * width + 0.5
     center_y = mean_vert * height + 0.5
-    gauss = torch.zeros((height, width), dtype=torch.float32)
+    gauss = np.empty((height, width), dtype=np.float)
     # generate kernel
     for i in range(height):
         for j in range(width):

@@ -76,12 +76,12 @@ class W300LP(data.Dataset):
 
     def __getitem__(self, index):
         inp, heatmap64, heatmap256, pts, center, scale = self.generateSampleFace(index)
-
-        # if self.is_train:
-        return inp, Target(heatmap64, heatmap256, pts, center, scale)
-        # else:
-        #     meta = {'index': index, 'center': c, 'scale': s, 'pts': pts,}
-        #     return inp, heatmap, pts, meta
+        target = Target(heatmap64, heatmap256, pts, center, scale)
+        if self.is_train:
+            return inp, target
+        else:
+            meta = {'index': index, 'center': center, 'scale': scale} #, 'pts': pts,}
+            return inp, target, meta
 
     def generateSampleFace(self, idx):
         sf = self.scale_factor
