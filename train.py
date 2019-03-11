@@ -303,7 +303,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             show_joints3D(pts_img.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.data[0].unsqueeze(0))
+            show_heatmap(out_hm.data[0].unsqueeze(0), outname="hm64.png")
 
 
         batch_time.update(time.time() - end)
@@ -396,21 +396,27 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
         out_hm = out_hm.cpu()
 
-        # show_heatmap(out_hm.data[0].unsqueeze(0))
+        show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
+        show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
 
         pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
         pts = pts * 4 # 64->256
 
         # if self.landmarks_type == LandmarksType._3D:
-        heatmaps = np.zeros((pts.size(0), 68, 256, 256), dtype=np.float32)
+        heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
         tpts = pts.clone()
         for b in range(pts.size(0)):
             for n in range(68):
                 if tpts[b, n, 0] > 0:
                     heatmaps[b, n] = draw_gaussian(
                         heatmaps[b, n], tpts[b, n], 2)
-        heatmaps = torch.from_numpy(heatmaps).to(device)
-        # show_heatmap(heatmaps.cpu().data[0].unsqueeze(0))
+        heatmaps = heatmaps.to(device)
+
+        if val_idx % 50 == 0:
+            show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
+            show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
 
         depth_inp = torch.cat((input_var, heatmaps), 1)
         depth_pred = model.Depth(depth_inp).detach()

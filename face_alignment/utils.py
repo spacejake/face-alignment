@@ -23,9 +23,9 @@ def _gaussian(
         mean_vert=0.5):
     # handle some defaults
     if width is None:
-        width = size
+        width = int(size)
     if height is None:
-        height = size
+        height = int(size)
     if sigma_horz is None:
         sigma_horz = sigma
     if sigma_vert is None:

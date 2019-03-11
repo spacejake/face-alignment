@@ -141,7 +141,7 @@ def show_joints3D(pts):
     plt.close()
 
 
-def show_heatmap(target):
+def show_heatmap(target, outname="heatmap.png"):
     num_sample = target.size(0)
     num_joints = target.size(1)
     width = target.size(2)
@@ -154,7 +154,7 @@ def show_heatmap(target):
 
         plt.imshow(color_heatmap(out))
         plt.show()
-        plt.savefig("heatmap.png")
+        plt.savefig(outname)
         plt.close()
 
 def sample_with_heatmap(inp, out, num_rows=2, parts_to_show=None):

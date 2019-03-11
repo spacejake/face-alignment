@@ -13,7 +13,7 @@ import torch
 import torch.utils.data as data
 
 from .common import Split, Target
-from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
+from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
 
@@ -121,8 +121,9 @@ class W300LP(data.Dataset):
         ptsTransMat = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             if pts[i, 0] > 0:
-                pts[i] = transform(pts[i] + 1, ptsTransMat)
-                heatmap256[i] = draw_labelmap(heatmap256[i], pts[i] - 1, sigma=1)
+                pts[i] = transform(pts[i], ptsTransMat)
+                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i], 2)
+                # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
 
@@ -132,8 +133,9 @@ class W300LP(data.Dataset):
         transMat = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
-                tpts[i, 0:2] = transform(tpts[i, 0:2] + 1, transMat)
-                heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
+                tpts[i, 0:2] = transform(tpts[i, 0:2], transMat)
+                heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i], 1)
+                # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         return inp, heatmap64, heatmap256, pts, c, s
 
