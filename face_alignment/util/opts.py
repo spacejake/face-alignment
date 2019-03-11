@@ -8,6 +8,7 @@ def argparser():
     P.add_argument('--data', type=str, default='data/300W_LP', help='path to dataset')
     P.add_argument('--seed', type=int, default=0, help='maunlly set RNG seed')
     P.add_argument('--nGpu', type=int, default=1, help='number of gpu(s) to use')
+    P.add_argument('--devices',  type=int, nargs='+', help='list ids (int) of gpu(s) to use')
     P.add_argument('--snapshot', type=int, default=3, help='save a snapshot every n epoch(s)')
     P.add_argument('--epochs', type=int, default=40, help='Number of total epochs to run')
     P.add_argument('--workers', type=int, default=4, help='number of data loader threads')

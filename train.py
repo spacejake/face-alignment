@@ -87,9 +87,17 @@ def main(args):
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
-        print("Using ", torch.cuda.device_count(), "GPUs...")
-        face_alignment_net = torch.nn.DataParallel(face_alignment_net)
-        depth_net = torch.nn.DataParallel(depth_net)
+        deviceList = None
+        nGpus = torch.cuda.device_count()
+        if (args.devices is not None):
+            deviceList = args.devices
+            nGpus = len(deviceList)
+        # elif args.nGpu > 1:
+        #     nGpus = args.nGpu
+
+        print("Using ", nGpus, "GPUs({})...".format(deviceList))
+        face_alignment_net = torch.nn.DataParallel(face_alignment_net, device_ids=deviceList)
+        depth_net = torch.nn.DataParallel(depth_net, device_ids=deviceList)
 
     face_alignment_net = face_alignment_net.to(device)
     depth_net = depth_net.to(device)
@@ -174,7 +182,8 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr = adjust_learning_rate(optimizer, epoch, lr, args.schedule, args.gamma)
+        lr = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+        lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
         train_loss, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
@@ -199,7 +208,7 @@ def main(args):
             is_best,
             predictions,
             checkpoint=args.checkpoint,
-            filename="test_checkpointFAN.pth.tar")
+            filename="checkpointFAN.pth.tar")
 
         save_checkpoint(
             {
@@ -213,7 +222,7 @@ def main(args):
             is_best,
             None,
             checkpoint=args.checkpoint,
-            filename="test_checkpointDepth.pth.tar")
+            filename="checkpointDepth.pth.tar")
         savefig(os.path.join(args.checkpoint, 'log_iter.eps'))
 
     logger.close()
