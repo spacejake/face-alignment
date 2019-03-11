@@ -304,6 +304,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
             show_heatmap(out_hm.data[0].unsqueeze(0), outname="hm64.png")
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
 
 
         batch_time.update(time.time() - end)
@@ -395,9 +396,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             out_hm += flip(flip_output[-1])
 
         out_hm = out_hm.cpu()
-
-        show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
-        show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
 
         pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
         pts = pts * 4 # 64->256
