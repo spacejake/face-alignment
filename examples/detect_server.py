@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath('..'))
+
 import face_alignment
 from face_alignment import NetworkSize
 
@@ -131,7 +136,7 @@ class DecectorServer(socketserver.UnixStreamServer):
 
 
 if __name__ == '__main__':
-    address = '/home/jake/face/socket'
+    address = 'socket'
 
     try:
         unlink(address)

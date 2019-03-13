@@ -1,11 +1,26 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath('..'))
+
+import matplotlib
+matplotlib.use("TkAgg")
+
 import face_alignment
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
+
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import matplotlib.animation as animationimport
+import tkinter
+
 from skimage import io
 
 # Run the 3D face alignment on a test image, without CUDA.
-fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True)
+fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True, remote=False)
 
 input = io.imread('../test/assets/aflw-test.jpg')
 preds = fa.get_landmarks(input)[-1]
@@ -38,4 +53,22 @@ ax.plot3D(preds[48:,0]*1.2,preds[48:,1],preds[48:,2], color='blue' )
 
 ax.view_init(elev=90., azim=90.)
 ax.set_xlim(ax.get_xlim()[::-1])
-plt.show()
+# plt.show()
+
+root = tkinter.Tk()
+root.wm_title("Embedding in Tk")
+
+canvas = FigureCanvasTkAgg(fig, root)
+ax.mouse_init()
+canvas.draw()
+canvas.get_tk_widget().grid()
+
+def _quit():
+    root.quit()     # stops mainloop
+    root.destroy()  # this is necessary on Windows to prevent
+                    # Fatal Python Error: PyEval_RestoreThread: NULL tstate
+
+button = tkinter.Button(master=root, text="Quit", command=_quit)
+# button.pack(side=tkinter.BOTTOM)
+
+tkinter.mainloop()
