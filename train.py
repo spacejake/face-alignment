@@ -439,6 +439,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    losseslmk = AverageMeter()
     acces = AverageMeter()
     end = time.time()
 
@@ -494,7 +495,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         for o in output:
             loss += criterion.hm(o, target_var)
 
-        loss += criterion.pts(depth_pred, target_pts[:,:,2])
+        losslmk = criterion.pts(depth_pred, target_pts[:,:,2])
         depth_pred = depth_pred.cpu()
         heatmaps = heatmaps.cpu()
         pts_img = get_preds(heatmaps)
@@ -509,12 +510,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             predictions[meta['index'][n], :, :] = pts_img[n, :, :]
 
         losses.update(loss.data, inputs.size(0))
+        losseslmk.update(losslmk.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         batch_time.update(time.time() - end)
         end = time.time()
 
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
             batch=val_idx + 1,
             size=len(loader),
             data=data_time.val,
@@ -522,6 +524,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
+            losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
 
