@@ -36,7 +36,7 @@ def argparser():
     P.add_argument('--retrain', type=str, default='', help='path to model to retrain with')
     P.add_argument('--optimState', type=str, default='', help='path to optimState to reload from')
     P.add_argument('--scale-factor', type=float, default=0.3, help='scaling factor')
-    P.add_argument('--rot-factor', type=float, default=30, help='rotation factor(in degrees)')
+    P.add_argument('--rot-factor', type=float, default=50, help='rotation factor(in degrees)')
     P.add_argument('-e', '--evaluation', action='store_true', help='show intermediate results')
     # P.add_argument('--reval', type=float, default='checkpoint/fan3d/300W-LP')
     P.add_argument('--debug', action='store_true', help='show intermediate results')
