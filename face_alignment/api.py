@@ -49,10 +49,14 @@ models_urls = {
     'depth': 'https://www.adrianbulat.com/downloads/python-fan/depth-2a464da4ea.pth.tar',
 }
 
+models_chkpts = {
+    '3DFAN-4': '../checkpoint/checkpointFAN.pth.tar',
+    'depth': '../checkpoint/checkpointDepth.pth.tar',
+}
 
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
-                 device='cuda', flip_input=False, face_detector='sfd', verbose=False):
+                 device='cuda', flip_input=False, face_detector='sfd', verbose=False, remote=True):
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
@@ -76,7 +80,15 @@ class FaceAlignment:
         else:
             network_name = '3DFAN-' + str(network_size)
 
-        fan_weights = load_url(models_urls[network_name], map_location=lambda storage, loc: storage)
+        if remote:
+            fan_weights = load_url(models_urls[network_name], map_location=lambda storage, loc: storage)
+        else:
+            fan_checkpoint = torch.load(models_chkpts[network_name])
+            # fan_weights = fan_checkpoint['state_dict']
+            fan_weights = {
+                    k.replace('module.', ''): v for k,
+                    v in fan_checkpoint['state_dict'].items()}
+
         self.face_alignment_net.load_state_dict(fan_weights)
 
         self.face_alignment_net.to(device)
@@ -86,7 +98,12 @@ class FaceAlignment:
         if landmarks_type == LandmarksType._3D:
             self.depth_prediciton_net = ResNetDepth()
 
-            depth_weights = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
+
+            if remote:
+                depth_weights = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
+            else:
+                depth_weights = torch.load(models_chkpts['depth'])
+
             depth_dict = {
                 k.replace('module.', ''): v for k,
                 v in depth_weights['state_dict'].items()}
@@ -166,13 +183,12 @@ class FaceAlignment:
             pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
 
             if self.landmarks_type == LandmarksType._3D:
-                heatmaps = np.zeros((68, 256, 256), dtype=np.float32)
+                heatmaps = torch.zeros((68, 256, 256), dtype=torch.float)
                 for i in range(68):
                     if pts[i, 0] > 0:
                         heatmaps[i] = draw_gaussian(
                             heatmaps[i], pts[i], 2)
-                heatmaps = torch.from_numpy(
-                    heatmaps).unsqueeze_(0)
+                heatmaps = heatmaps.unsqueeze_(0)
 
                 heatmaps = heatmaps.to(self.device)
                 depth_pred = self.depth_prediciton_net(
