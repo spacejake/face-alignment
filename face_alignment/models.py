@@ -330,8 +330,10 @@ class ResPatchDiscriminator(nn.Module):
         model = []
         model += [OptimizedBlock(in_channels, ndf)]
         tndf = ndf
+        downsample = True
         for i in range(ndlayers):
-            model += [ResBlock(tndf, tndf*2, downsample=True)]
+            model += [ResBlock(tndf, tndf*2, downsample=downsample)]
+            downsample = not downsample
             tndf *= 2
         model += [nn.LeakyReLU()]
 
