@@ -122,9 +122,9 @@ def main(args):
     optimizerFan = torch.optim.RMSprop(
         model.FAN.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    optimizerFanD = torch.optim.RMSprop(
-        model.FAN.parameters(),
-        lr=args.lr*4, momentum=args.momentum, weight_decay=args.weight_decay)
+    optimizerFanD = torch.optim.Adam(
+        model.D_hm.parameters(),
+        lr=args.lr*4, weight_decay=args.weight_decay)
     optimizerDepth = torch.optim.RMSprop(
         model.Depth.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
@@ -378,10 +378,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         in64 = in64.to(device) # CUDA interpolate may be nondeterministic
         fake_in = torch.cat((in64, out_hm), 1) # Concat input image with corresponding intermediate heatmaps
-        loss_gan, loss_g = backwardG(fake_in, loss, model.D_hm, optimizer.FAN, criterion.hm, weight=0.25)
+        loss_gan, loss_g = backwardG(fake_in, loss*1, model.D_hm, optimizer.FAN, criterion.hm, weight=1)
 
         real_in = torch.cat((in64, target_hm64), 1)  # Concat input image with corresponding intermediate heatmaps
         loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm, criterion.d_hm)
+        
+        optimizer.Depth.zero_grad()
+        lossDepth.backward()
+        optimizer.Depth.step()
 
         pts_img = get_preds(target_hm256)
         pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
