@@ -276,9 +276,9 @@ class ResBlock(nn.Module):
         if use_BN:
             model += [nn.BatchNorm2d(in_channels)]
 
-        model += [nn.ReLU()]
+        model += [nn.LeakyReLU()]
         model += [conv3x3(in_channels, hidden_channels, padding=1)]
-        model += [nn.ReLU()]
+        model += [nn.LeakyReLU()]
         model += [conv3x3(hidden_channels, out_channels, padding=1)]
         if downsample:
             model += [nn.AvgPool2d(2)]
@@ -305,7 +305,7 @@ class OptimizedBlock(nn.Module):
     def make_res_block(self, in_channels, out_channels):
         model = []
         model += [conv3x3(in_channels, out_channels, padding=1)]
-        model += [nn.ReLU()]
+        model += [nn.LeakyReLU()]
         model += [conv3x3(out_channels, out_channels, padding=1)]
         model += [nn.AvgPool2d(2)]
         return nn.Sequential(*model)
@@ -321,70 +321,26 @@ class OptimizedBlock(nn.Module):
     def forward(self, input):
         return self.res_block(input) + self.residual_connect(input)
 
-class SNResPatchDiscriminator(nn.Module):
-    def __init__(self, ndf=64, ndlayers=4):
-        super(SNResPatchDiscriminator, self).__init__()
-        self.res_d = self.make_model(ndf, ndlayers)
+class ResPatchDiscriminator(nn.Module):
+    def __init__(self, in_channels=3, ndf=128, ndlayers=4):
+        super(ResPatchDiscriminator, self).__init__()
+        self.res_d = self.make_model(in_channels, ndf, ndlayers)
 
-    def make_model(self, ndf, ndlayers):
+    def make_model(self, in_channels, ndf, ndlayers):
         model = []
-        model += [OptimizedBlock(3, ndf)]
+        model += [OptimizedBlock(in_channels, ndf)]
         tndf = ndf
         for i in range(ndlayers):
             model += [ResBlock(tndf, tndf*2, downsample=True)]
             tndf *= 2
-        model += [nn.ReLU()]
+        model += [nn.LeakyReLU()]
+
+        # output 1 channel
+        model += [ResBlock(tndf, 1, downsample=False)]
+
         return nn.Sequential(*model)
 
 
     def forward(self, input):
         out = self.res_d(input)
         return out
-
-# Defines the PatchGAN discriminator with the specified arguments.
-# class NLayerDiscriminator(nn.Module):
-#     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, gpu_ids=[]):
-#         super(NLayerDiscriminator, self).__init__()
-#         self.gpu_ids = gpu_ids
-#         # if type(norm_layer) == functools.partial:
-#         #     use_bias = norm_layer.func == nn.InstanceNorm2d
-#         # else:
-#         #     use_bias = norm_layer == nn.InstanceNorm2d
-#
-#         kw = 4
-#         padw = 1
-#         sequence = [
-#             nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
-#             nn.LeakyReLU(0.2, True)
-#         ]
-#
-#         nf_mult = 1
-#         nf_mult_prev = 1
-#         for n in range(1, n_layers):
-#             nf_mult_prev = nf_mult
-#             nf_mult = min(2**n, 8)
-#             sequence += [
-#                 nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
-#                           kernel_size=kw, stride=2, padding=padw, bias=use_bias),
-#                 norm_layer(ndf * nf_mult),
-#                 nn.LeakyReLU(0.2, True)
-#             ]
-#
-#         nf_mult_prev = nf_mult
-#         nf_mult = min(2**n_layers, 8)
-#         sequence += [
-#             nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
-#                       kernel_size=kw, stride=1, padding=padw, bias=use_bias),
-#             norm_layer(ndf * nf_mult),
-#             nn.LeakyReLU(0.2, True)
-#         ]
-#
-#         sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]
-#
-#         if use_sigmoid:
-#             sequence += [nn.Sigmoid()]
-#
-#         self.model = nn.Sequential(*sequence)
-#
-#     def forward(self, input):
-#         return self.model(input)

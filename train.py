@@ -13,11 +13,12 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+from torchvision import transforms
 import itertools
 
 from face_alignment import models
 from face_alignment.api import NetworkSize
-from face_alignment.models import FAN, ResNetDepth
+from face_alignment.models import FAN, ResNetDepth, ResPatchDiscriminator
 from face_alignment.utils import *
 
 from face_alignment.datasets.W300LP import W300LP
@@ -25,7 +26,7 @@ from face_alignment.datasets.common import Target
 
 
 from face_alignment.util.logger import Logger, savefig
-from face_alignment.util.imutils import show_joints3D, show_heatmap
+from face_alignment.util.imutils import show_joints3D, show_heatmap, imshow
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 import face_alignment.util.opts as opts
@@ -40,23 +41,28 @@ idx = range(1, 69, 1)
 
 class Model(NamedTuple):
     FAN: torch.nn.Module
+    D_hm: torch.nn.Module
     Depth: torch.nn.Module
 
     def eval(self):
         self.FAN.eval()
+        self.D_hm.eval()
         self.Depth.eval()
 
     def train(self):
         self.FAN.train()
+        self.D_hm.train()
         self.Depth.train()
 
 
 class Criterion(NamedTuple):
     hm: torch.nn.Module
+    d_hm: torch.nn.Module
     pts: torch.nn.Module
 
 class Optimizer(NamedTuple):
     FAN: torch.optim.Optimizer
+    D_hm: torch.optim.Optimizer
     Depth: torch.optim.Optimizer
 
 def get_loader(data):
@@ -84,6 +90,7 @@ def main(args):
     # Network Models
     network_size = int(NetworkSize.LARGE)
     face_alignment_net = FAN(network_size)
+    fan_D = ResPatchDiscriminator(in_channels=71) #3-ch image + 68-ch heatmap
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
@@ -97,26 +104,32 @@ def main(args):
 
         print("Using ", nGpus, "GPUs({})...".format(deviceList))
         face_alignment_net = torch.nn.DataParallel(face_alignment_net, device_ids=deviceList)
+        fan_D = torch.nn.DataParallel(fan_D, device_ids=deviceList)
         depth_net = torch.nn.DataParallel(depth_net, device_ids=deviceList)
 
     face_alignment_net = face_alignment_net.to(device)
+    fan_D = fan_D.to(device)
     depth_net = depth_net.to(device)
-    model = Model(face_alignment_net, depth_net)
+    model = Model(face_alignment_net, fan_D, depth_net)
 
     # Loss Functions
-    hm_crit = torch.nn.MSELoss(size_average=True).to(device)
-    pnt_crit = torch.nn.MSELoss(reduction='mean').to(device)
-    criterion = Criterion(hm_crit, pnt_crit)
+    crit_hm = torch.nn.MSELoss(reduction='mean').to(device)
+    crit_gan = torch.nn.MSELoss(reduction='mean').to(device)
+    crit_depth = torch.nn.MSELoss(reduction='mean').to(device)
+    criterion = Criterion(crit_hm, crit_gan, crit_depth)
 
     # Optimization
     optimizerFan = torch.optim.RMSprop(
         model.FAN.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    optimizerFanD = torch.optim.RMSprop(
+        model.FAN.parameters(),
+        lr=args.lr*4, momentum=args.momentum, weight_decay=args.weight_decay)
     optimizerDepth = torch.optim.RMSprop(
         model.Depth.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-    optimizer = Optimizer(optimizerFan, optimizerDepth)
+    optimizer = Optimizer(optimizerFan, optimizerFanD, optimizerDepth)
 
     # Load Data
     title = args.checkpoint.split('/')[-1] + ' on ' + args.data.split('/')[-1]
@@ -144,6 +157,19 @@ def main(args):
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
         logger.set_names(['Epoch', 'LR', 'Train Loss', 'Valid Loss', 'Train Acc', 'Val Acc', 'AUC'])
+
+    if args.resume_gan:
+        if os.path.isfile(args.resume_gan):
+            print("=> Loading Discriminator checkpoint '{}'".format(args.resume_gan))
+            checkpoint = torch.load(args.resume_gan)
+            args.start_epoch = checkpoint['epoch']
+            best_acc = checkpoint['best_acc']
+            model.D_hm.load_state_dict(checkpoint['state_dict'])
+            optimizer.D_hm.load_state_dict(checkpoint['optimizer'])
+            print("=> Loaded Discriminator checkpoint '{}' (epoch {})".format(args.resume_gan, checkpoint['epoch']))
+            # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
+        else:
+            print("=> no Discriminator checkpoint found at '{}'".format(args.resume_gan))
 
     if args.resume_depth:
         if os.path.isfile(args.resume_depth):
@@ -213,6 +239,19 @@ def main(args):
         save_checkpoint(
             {
                 'epoch': epoch + 1,
+                'netType': args.netType,
+                'state_dict': model.D_hm.state_dict(),
+                'best_acc': best_auc,
+                'optimizer': optimizer.D_hm.state_dict(),
+            },
+            is_best,
+            None,
+            checkpoint=args.checkpoint,
+            filename="checkpointGAN.pth.tar")
+
+        save_checkpoint(
+            {
+                'epoch': epoch + 1,
                 'iter': 0,
                 'netType': args.netType,
                 'state_dict': model.Depth.state_dict(),
@@ -230,11 +269,58 @@ def main(args):
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
 
+def backwardG(fake, loss_id, model, opt, crit_gan, weight=1):
+
+    # GAN Loss
+    pred_fake = model(fake)
+    true = torch.ones(pred_fake.shape).cuda()
+    loss_G = crit_gan(pred_fake, true)
+
+    # Combined Loss
+    loss_G_total = loss_G * weight + loss_id
+
+    # backward
+    opt.zero_grad()
+    loss_G_total.backward()
+    opt.step()
+
+    return loss_G_total, loss_G
+
+
+def backwardD(fake, real, model, opt, crit):
+    # Train Real
+    pred_real = model(real)
+    true = torch.ones(pred_real.shape).cuda()
+    loss_D_real = crit(pred_real, true)
+
+    # Train Fake
+    pred_fake = model(fake.detach())
+    false = torch.zeros(pred_fake.shape).cuda()
+    loss_D_fake = crit(pred_fake, false)
+
+    # Combined loss
+    loss_D = (loss_D_real + loss_D_fake) * 0.5
+
+    # backward
+    opt.zero_grad()
+    loss_D.backward()  # retain_graph=True)
+    opt.step()
+
+    return loss_D, loss_D_real, loss_D_fake
+
+
 def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=False, flip=False, device='cuda:0'):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     losseslmk = AverageMeter()
+
+    losses_gan = AverageMeter()
+    losses_g = AverageMeter()
+    losses_d = AverageMeter()
+    losses_d_real = AverageMeter()
+    losses_d_fake = AverageMeter()
+
     acces = AverageMeter()
 
     model.train()
@@ -261,8 +347,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             flip_output = model.FAN(flip(out_hm[-1].clone()), is_label=True)
             out_hm += flip(flip_output[-1])
 
-        out_hm = out_hm.cpu()
-
         # DEPTH
         target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
         depth_inp = torch.cat((input_var, target_hm256), 1)
@@ -282,14 +366,22 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
         depth_pred = depth_pred.cpu()
 
-        # Back-prop
-        optimizer.FAN.zero_grad()
-        loss.backward()
-        optimizer.FAN.step()
+        # FA-GAN and Back-prop
+        in64 = torch.nn.functional.interpolate(inputs,
+                                               size=(64, 64),
+                                               mode='bilinear',
+                                               align_corners=True)
 
-        optimizer.Depth.zero_grad()
-        lossDepth.backward()
-        optimizer.Depth.step()
+        #DEBUG
+        # imshow(in64[0])
+
+
+        in64 = in64.to(device) # CUDA interpolate may be nondeterministic
+        fake_in = torch.cat((in64, out_hm), 1) # Concat input image with corresponding intermediate heatmaps
+        loss_gan, loss_g = backwardG(fake_in, loss, model.D_hm, optimizer.FAN, criterion.hm)
+
+        real_in = torch.cat((in64, target_hm64), 1)  # Concat input image with corresponding intermediate heatmaps
+        loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm, criterion.d_hm)
 
         pts_img = get_preds(target_hm256)
         pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
@@ -297,19 +389,28 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         losses.update(loss.data, inputs.size(0))
         losseslmk.update(lossDepth.data, inputs.size(0))
+        losses_gan.update(loss_gan.data, inputs.size(0))
+        losses_g.update(loss_g.data, inputs.size(0))
+        losses_d.update(loss_d.data, inputs.size(0))
+        losses_d_real.update(loss_d_real.data, inputs.size(0))
+        losses_d_fake.update(loss_d_fake.data, inputs.size(0))
+
         acces.update(acc[0], inputs.size(0))
 
         if loader_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.data[0].unsqueeze(0), outname="hm64.png")
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
 
 
         batch_time.update(time.time() - end)
         end = time.time()
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} |' \
+                     ' Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f} |' \
+                     ' Loss_gan: {loss_gan:.4f}, Loss_g: {loss_g:.4f},' \
+                     ' Loss_d: {loss_d:.4f}, Loss_d_real: {loss_d_real:.4f}, Loss_d_fake: {loss_d_fake:.4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
@@ -318,8 +419,17 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             eta=bar.eta_td,
             loss=losses.avg,
             losslmk=losseslmk.avg,
-            acc=acces.avg)
+            acc=acces.avg,
+            loss_gan=losses_gan.avg,
+            loss_g=losses_g.avg,
+            loss_d=losses_d.avg,
+            loss_d_real=losses_d_real.avg,
+            loss_d_fake=losses_d_fake.avg)
         bar.next()
+
+        # if loader_idx % 5 == 0:
+        #     break
+
     bar.finish()
 
     return (losses.avg+losseslmk.avg), acces.avg
@@ -414,6 +524,9 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             loss=losses.avg,
             acc=acces.avg)
         bar.next()
+
+        # if val_idx % 5 == 0:
+        #     break
 
     bar.finish()
     mean_error = torch.mean(all_dists)

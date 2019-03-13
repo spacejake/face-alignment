@@ -117,6 +117,8 @@ def imshow(img):
     npimg = im_to_numpy(img).astype(np.uint8)
     plt.imshow(npimg)
     plt.axis('off')
+    # plt.savefig("downsampled.png")
+    # plt.close()
 
 def show_joints(img, pts):
     imshow(img)
