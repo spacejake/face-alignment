@@ -320,49 +320,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
-        # print(' Train: ({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
-        #     batch=loader_idx + 1,
-        #     size=len(loader),
-        #     data=data_time.val,
-        #     bt=batch_time.val,
-        #     total=bar.elapsed_td,
-        #     eta=bar.eta_td,
-        #     loss=losses.avg,
-        #     losslmk=losseslmk.avg,
-        #     acc=acces.avg))
-
-        # if (loader_idx+1) % 50 == 0:
-        #     break
-
-        # save every once and awhile
-        # if (loader_idx+1) % 1000 == 0:
-        #     save_checkpoint(
-        #         {
-        #             'epoch': epoch + 1,
-        #             'inter': loader_idx + 1,
-        #             'netType': args.netType,
-        #             'state_dict': model.FAN.state_dict(),
-        #             'best_acc': best_auc,
-        #             'optimizer': optimizer.FAN.state_dict(),
-        #         },
-        #         is_best=False,
-        #         # predictions,
-        #         checkpoint=args.checkpoint,
-        #         filename="checkpointFAN{}.pth.tar".format(loader_idx+1))
-        #
-        #     save_checkpoint(
-        #         {
-        #             'epoch': epoch + 1,
-        #             'inter': loader_idx + 1,
-        #             'netType': args.netType,
-        #             'state_dict': model.Depth.state_dict(),
-        #             'best_acc': best_auc,
-        #             'optimizer': optimizer.Depth.state_dict(),
-        #         },
-        #         is_best=False,
-        #         # predictions,
-        #         checkpoint=args.checkpoint,
-        #         filename="checkpointDepth{}.pth.tar".format(loader_idx+1))
     bar.finish()
 
     return (losses.avg+losseslmk.avg), acces.avg
@@ -457,19 +414,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             loss=losses.avg,
             acc=acces.avg)
         bar.next()
-        # print(' Val: ({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
-        #     batch=val_idx + 1,
-        #     size=len(loader),
-        #     data=data_time.val,
-        #     bt=batch_time.val,
-        #     total=bar.elapsed_td,
-        #     eta=bar.eta_td,
-        #     loss=losses.avg,
-        #     acc=acces.avg))
-
-
-        # if (val_idx+1) % 5 == 0:
-        #     break
 
     bar.finish()
     mean_error = torch.mean(all_dists)
