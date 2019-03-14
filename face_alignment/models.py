@@ -322,11 +322,11 @@ class OptimizedBlock(nn.Module):
         return self.res_block(input) + self.residual_connect(input)
 
 class ResPatchDiscriminator(nn.Module):
-    def __init__(self, in_channels=3, ndf=64, ndlayers=4):
+    def __init__(self, in_channels=3, ndf=64, ndlayers=4, use_sigmoid=False):
         super(ResPatchDiscriminator, self).__init__()
-        self.res_d = self.make_model(in_channels, ndf, ndlayers)
+        self.res_d = self.make_model(in_channels, ndf, ndlayers, use_sigmoid)
 
-    def make_model(self, in_channels, ndf, ndlayers):
+    def make_model(self, in_channels, ndf, ndlayers, use_sigmoid):
         model = []
         model += [OptimizedBlock(in_channels, ndf)]
         tndf = ndf
@@ -340,9 +340,39 @@ class ResPatchDiscriminator(nn.Module):
         # output 1 channel
         model += [ResBlock(tndf, 1, downsample=False)]
 
+        if use_sigmoid:
+            model += [nn.Sigmoid()]
+
         return nn.Sequential(*model)
 
 
     def forward(self, input):
         out = self.res_d(input)
         return out
+
+class ResDiscriminator(nn.Module):
+    def __init__(self, in_channels=3, ndf=64, ndlayers=4, use_sigmoid=False):
+        super(ResDiscriminator, self).__init__()
+        self.res_d = self.make_model(in_channels, ndf, ndlayers, use_sigmoid)
+        # self.fc = nn.Sequential(nn.Linear(ndf*(2**ndlayers), 1), nn.Sigmoid())
+        self.fc = nn.Sequential(nn.Linear(1024, 1), nn.Sigmoid())
+
+    def make_model(self, in_channels, ndf, ndlayers, use_sigmoid):
+        model = []
+        model += [OptimizedBlock(in_channels, ndf)]
+        tndf = ndf
+        downsample = True
+        for i in range(ndlayers):
+            model += [ResBlock(tndf, tndf*2, downsample=downsample)]
+            # downsample = not downsample
+            tndf *= 2
+        model += [nn.LeakyReLU()]
+
+        return nn.Sequential(*model)
+
+
+    def forward(self, input):
+        out = self.res_d(input)
+        # out = F.avg_pool2d(out, out.size(3), stride=1)
+        out = out.view(-1, 1024)
+        return self.fc(out)
