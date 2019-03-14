@@ -322,7 +322,7 @@ class OptimizedBlock(nn.Module):
         return self.res_block(input) + self.residual_connect(input)
 
 class ResPatchDiscriminator(nn.Module):
-    def __init__(self, in_channels=3, ndf=128, ndlayers=4):
+    def __init__(self, in_channels=3, ndf=64, ndlayers=4):
         super(ResPatchDiscriminator, self).__init__()
         self.res_d = self.make_model(in_channels, ndf, ndlayers)
 
@@ -333,7 +333,7 @@ class ResPatchDiscriminator(nn.Module):
         downsample = True
         for i in range(ndlayers):
             model += [ResBlock(tndf, tndf*2, downsample=downsample)]
-            downsample = not downsample
+            # downsample = not downsample
             tndf *= 2
         model += [nn.LeakyReLU()]
 

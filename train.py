@@ -26,10 +26,11 @@ from face_alignment.datasets.common import Target
 
 
 from face_alignment.util.logger import Logger, savefig
-from face_alignment.util.imutils import show_joints3D, show_heatmap, imshow
+from face_alignment.util.imutils import show_joints3D, show_heatmap, imshow, sample_with_heatmap
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 import face_alignment.util.opts as opts
+from skimage import io
 
 model_names = sorted(
     name for name in models.__dict__
@@ -90,7 +91,7 @@ def main(args):
     # Network Models
     network_size = int(NetworkSize.LARGE)
     face_alignment_net = FAN(network_size)
-    fan_D = ResPatchDiscriminator(in_channels=71) #3-ch image + 68-ch heatmap
+    fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2) #3-ch image + 68-ch heatmap
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
@@ -124,7 +125,7 @@ def main(args):
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     optimizerFanD = torch.optim.Adam(
         model.D_hm.parameters(),
-        lr=args.lr*4, weight_decay=args.weight_decay)
+        lr=args.lr, weight_decay=args.weight_decay)
     optimizerDepth = torch.optim.RMSprop(
         model.Depth.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
@@ -407,6 +408,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             # show_heatmap(target.heatmap256)
             show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            io.imsave("input-with-hm64.png",sample_hm)
+            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+            io.imsave("input-with-gt-hm64.png",sample_hm)
 
 
         batch_time.update(time.time() - end)
