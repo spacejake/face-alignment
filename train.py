@@ -92,7 +92,7 @@ def main(args):
     network_size = int(NetworkSize.LARGE)
     face_alignment_net = FAN(network_size)
     # fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
-    fan_D = ResDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
+    fan_D = ResDiscriminator(in_channels=71, ndf=128, ndlayers=1, use_sigmoid=True) #3-ch image + 68-ch heatmap
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
@@ -121,12 +121,15 @@ def main(args):
     criterion = Criterion(crit_hm, crit_gan, crit_depth)
 
     # Optimization
+
+    lr_hm_d = args.lr*0.1
+    print("Heatmap Discriminator initial lr: {}".format(lr_hm_d))
     optimizerFan = torch.optim.RMSprop(
         model.FAN.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     optimizerFanD = torch.optim.Adam(
         model.D_hm.parameters(),
-        lr=args.lr, weight_decay=args.weight_decay)
+        lr=lr_hm_d, weight_decay=args.weight_decay)
     optimizerDepth = torch.optim.RMSprop(
         model.Depth.parameters(),
         lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
@@ -210,9 +213,11 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+        adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+        lr_hm_d = adjust_learning_rate(optimizer.D_hm, epoch, lr_hm_d, args.schedule, args.gamma)
         lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
-        print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
+        
+        print('=> Epoch: %d | LR_G %.8f | LR_D %.8f' % (epoch + 1, lr, lr_hm_d))
 
         train_loss, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
                                       debug=args.debug, flip=args.flip, device=device)
@@ -389,8 +394,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         lossDepth.backward()
         optimizer.Depth.step()
 
-        pts_img = get_preds(target_hm256)
-        pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
+        #pts_img = get_preds(target_hm256)
+        pts, pts_img = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+        pts = pts * 4 # 64->256
+        pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
@@ -507,11 +514,12 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
         losslmk = criterion.pts(depth_pred, target_pts[:,:,2])
         depth_pred = depth_pred.cpu()
-        heatmaps = heatmaps.cpu()
-        pts_img = get_preds(heatmaps)
-        pts_img = torch.cat((pts_img.data, depth_pred.detach().data.unsqueeze(2)), 2)
+        #heatmaps = heatmaps.cpu()
+        #pts_img = get_preds(heatmaps)
+        pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
 
-        # show_joints3D(pts_img.detach()[0])
+        if val_idx % 50 == 0:
+            show_joints3D(pts_img.detach()[0])
 
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
