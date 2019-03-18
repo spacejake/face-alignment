@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 from progress.bar import Bar
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from skimage import io
 
 import torch
 import torch.nn as nn
@@ -25,7 +26,7 @@ from face_alignment.datasets.common import Target
 
 
 from face_alignment.util.logger import Logger, savefig
-from face_alignment.util.imutils import show_joints3D, show_heatmap
+from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 import face_alignment.util.opts as opts
@@ -135,7 +136,13 @@ def main(args):
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
-            model.FAN.load_state_dict(checkpoint['state_dict'])
+
+            # model.FAN.load_state_dict(checkpoint['state_dict'])
+            fan_weights = {
+                k.replace('module.', ''): v for k,
+                v in checkpoint['state_dict'].items()}
+            model.FAN.load_state_dict(fan_weights)
+
             optimizer.FAN.load_state_dict(checkpoint['optimizer'])
             print("=> Loaded FAN checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
             logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
@@ -151,7 +158,13 @@ def main(args):
             checkpoint = torch.load(args.resume_depth)
             args.start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
-            model.Depth.load_state_dict(checkpoint['state_dict'])
+
+            # model.Depth.load_state_dict(checkpoint['state_dict'])
+            depth_weights = {
+                k.replace('module.', ''): v for k,
+                v in checkpoint['state_dict'].items()}
+            model.Depth.load_state_dict(depth_weights)
+
             optimizer.Depth.load_state_dict(checkpoint['optimizer'])
             print("=> Loaded Depth checkpoint '{}' (epoch {})".format(args.resume_depth, checkpoint['epoch']))
             # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
@@ -291,8 +304,12 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         lossDepth.backward()
         optimizer.Depth.step()
 
-        pts_img = get_preds(target_hm256)
-        pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
+        # pts_img = get_preds(target_hm256)
+        # pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
+
+        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+        pts = pts * 4 # 64->256
+        pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
@@ -303,8 +320,12 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             show_joints3D(pts_img.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.data[0].unsqueeze(0), outname="hm64.png")
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            io.imsave("input-with-hm64.png",sample_hm)
+            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+            io.imsave("input-with-gt-hm64.png",sample_hm)
 
 
         batch_time.update(time.time() - end)
@@ -415,6 +436,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            io.imsave("val_input-with-hm64.png",sample_hm)
+            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+            io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
         depth_inp = torch.cat((input_var, heatmaps), 1)
         depth_pred = model.Depth(depth_inp).detach()
@@ -430,11 +455,9 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         loss += criterion.pts(depth_pred, target_pts[:,:,2])
         depth_pred = depth_pred.cpu()
         heatmaps = heatmaps.cpu()
-        pts_img = get_preds(heatmaps)
-        pts_img = torch.cat((pts_img.data, depth_pred.detach().data.unsqueeze(2)), 2)
-
-        # show_joints3D(pts_img.detach()[0])
-
+        # pts_img = get_preds(heatmaps)
+        # pts_img = torch.cat((pts_img.data, depth_pred.detach().data.unsqueeze(2)), 2)
+        pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
