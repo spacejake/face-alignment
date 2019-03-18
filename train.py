@@ -150,7 +150,7 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Valid Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     if args.resume_depth:
         if os.path.isfile(args.resume_depth):
@@ -199,14 +199,14 @@ def main(args):
         lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
-        train_loss, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
+        train_loss, train_losslmk, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
                                       debug=args.debug, flip=args.flip, device=device)
 
         # do not save predictions in model file
-        valid_loss, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
+        valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, valid_loss, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_losslmk, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
@@ -386,13 +386,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         #         filename="checkpointDepth{}.pth.tar".format(loader_idx+1))
     bar.finish()
 
-    return (losses.avg+losseslmk.avg), acces.avg
+    return losses.avg, losseslmk.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    losseslmk = AverageMeter()
     acces = AverageMeter()
     end = time.time()
 
@@ -452,7 +453,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         for o in output:
             loss += criterion.hm(o, target_var)
 
-        loss += criterion.pts(depth_pred, target_pts[:,:,2])
+        lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
+
         depth_pred = depth_pred.cpu()
         heatmaps = heatmaps.cpu()
         # pts_img = get_preds(heatmaps)
@@ -465,12 +467,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             predictions[meta['index'][n], :, :] = pts_img[n, :, :]
 
         losses.update(loss.data, inputs.size(0))
+        losseslmk.update(lossDepth.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         batch_time.update(time.time() - end)
         end = time.time()
 
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
             batch=val_idx + 1,
             size=len(loader),
             data=data_time.val,
@@ -478,6 +481,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
+            losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
         # print(' Val: ({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
@@ -498,7 +502,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     mean_error = torch.mean(all_dists)
     auc = calc_metrics(all_dists, path=args.checkpoint, category="300W-LP-3D") # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
-    return losses.avg, acces.avg, predictions, auc
+    return losses.avg, losseslmk.avg, acces.avg, predictions, auc
 
 
 if __name__ == '__main__':
