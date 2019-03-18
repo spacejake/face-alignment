@@ -120,8 +120,8 @@ def transform(point, transform, invert=False):
         inverse transformation matrix (default: {False})
     """
     _pt = torch.ones(3)
-    _pt[0] = point[0]
-    _pt[1] = point[1]
+    _pt[0] = point[0] - 1
+    _pt[1] = point[1] - 1
 
     if invert:
         transform = torch.inverse(transform)
@@ -133,7 +133,7 @@ def transform(point, transform, invert=False):
     else:
         new_point = new_point[0:2]
 
-    return new_point.int() #+ 1
+    return new_point.int() + 1
 
 # def transform(point, center, scale, resolution, invert=False):
 #     """apply affine transformation matrix to point.
