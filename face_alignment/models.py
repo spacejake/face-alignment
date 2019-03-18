@@ -379,15 +379,10 @@ class ResDiscriminator(nn.Module):
         return self.fc(out)
 
 
- # Defines the PatchGAN discriminator with the specified arguments.
+ # Defines the PatchGAN/binary discriminator with the specified arguments.
 class NLayerDiscriminator(nn.Module):
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, gpu_ids=[]):
+    def __init__(self, input_nc, ndf=64, n_layers=3, use_sigmoid=False, use_bias=False):
         super(NLayerDiscriminator, self).__init__()
-        self.gpu_ids = gpu_ids
-        # if type(norm_layer) == functools.partial:
-        #     use_bias = norm_layer.func == nn.InstanceNorm2d
-        # else:
-        #     use_bias = norm_layer == nn.InstanceNorm2d
 
         kw = 4
         padw = 1
@@ -404,7 +399,7 @@ class NLayerDiscriminator(nn.Module):
             sequence += [
                 nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                           kernel_size=kw, stride=2, padding=padw, bias=use_bias),
-                norm_layer(ndf * nf_mult),
+                nn.BatchNorm2d(ndf * nf_mult),
                 nn.LeakyReLU(0.2, True)
             ]
 
@@ -413,7 +408,7 @@ class NLayerDiscriminator(nn.Module):
         sequence += [
             nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
                       kernel_size=kw, stride=1, padding=padw, bias=use_bias),
-            norm_layer(ndf * nf_mult),
+            nn.BatchNorm2d(ndf * nf_mult),
             nn.LeakyReLU(0.2, True)
         ]
 
@@ -435,30 +430,30 @@ class NLayerDiscriminator(nn.Module):
         return self.fc(out)
 
 
-class Discriminator(nn.Module):
-    def __init__(self, ngpu):
-        super(Discriminator, self).__init__()
-        self.ngpu = ngpu
-        self.main = nn.Sequential(
-            # input is (nc) x 64 x 64
-            nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf) x 32 x 32
-            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*2) x 16 x 16
-            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*4) x 8 x 8
-            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*8) x 4 x 4
-            nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, input):
-        return self.main(input)
+# class Discriminator(nn.Module):
+#     def __init__(self, ngpu):
+#         super(Discriminator, self).__init__()
+#         self.ngpu = ngpu
+#         self.main = nn.Sequential(
+#             # input is (nc) x 64 x 64
+#             nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf) x 32 x 32
+#             nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 2),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*2) x 16 x 16
+#             nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 4),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*4) x 8 x 8
+#             nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 8),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*8) x 4 x 4
+#             nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+#             nn.Sigmoid()
+#         )
+#
+#     def forward(self, input):
+#         return self.main(input)
