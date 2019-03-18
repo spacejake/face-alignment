@@ -98,4 +98,35 @@ ENV/
 /site
 
 # mypy
-.mypy_cache/
+.mypy_cache
+
+
+############
+## CUSTOM ##
+############
+
+# data dir
+data/
+
+#checkpoint dir
+checkpoint*/
+ckpnt*/
+
+# example out
+examples/out*/
+examples/kinect*/
+
+#logs
+log*
+
+# Training out
+*val*.png
+*hm*.png
+3dPoints.png
+
+# VIM Swap files
+*.swp
+*.swo
+
+# Pycharm files
+.idea/
