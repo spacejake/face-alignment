@@ -168,7 +168,7 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Valid Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Train LossG', 'Train LossD', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     if args.resume_gan:
         if os.path.isfile(args.resume_gan):
@@ -232,14 +232,14 @@ def main(args):
         
         print('=> Epoch: %d | LR_G %.8f | LR_D %.8f' % (epoch + 1, lr, lr_hm_d))
 
-        train_loss, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
+        train_loss, train_losslmk, loss_g, loss_d, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
                                       debug=args.debug, flip=args.flip, device=device)
 
         # do not save predictions in model file
-        valid_loss, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
+        valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, valid_loss, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_losslmk, loss_g, loss_d, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
@@ -464,7 +464,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
     bar.finish()
 
-    return (losses.avg+losseslmk.avg), acces.avg
+    return losses.avg, losseslmk.avg, losses_g.avg, losses_d.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
@@ -531,7 +531,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         for o in output:
             loss += criterion.hm(o, target_var)
 
-        losslmk = criterion.pts(depth_pred, target_pts[:,:,2])
+        lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
         depth_pred = depth_pred.cpu()
 
         heatmaps = heatmaps.cpu()
@@ -548,7 +548,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             predictions[meta['index'][n], :, :] = pts_img[n, :, :]
 
         losses.update(loss.data, inputs.size(0))
-        losseslmk.update(losslmk.data, inputs.size(0))
+        losseslmk.update(lossDepth.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         batch_time.update(time.time() - end)
@@ -566,14 +566,14 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             acc=acces.avg)
         bar.next()
 
-        # if val_idx % 5 == 0:
-        #     break
+        if val_idx % 5 == 0:
+            break
 
     bar.finish()
     mean_error = torch.mean(all_dists)
     auc = calc_metrics(all_dists, path=args.checkpoint, category="300W-LP-3D") # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
-    return losses.avg, acces.avg, predictions, auc
+    return losses.avg, losseslmk.avg, acces.avg, predictions, auc
 
 
 if __name__ == '__main__':
