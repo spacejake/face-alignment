@@ -164,6 +164,7 @@ class FAN(nn.Module):
             self.add_module('bn_end' + str(hg_module), nn.BatchNorm2d(256))
             self.add_module('l' + str(hg_module), nn.Conv2d(256,
                                                             68, kernel_size=1, stride=1, padding=0))
+            self.add_module('dropout_' + str(hg_module), nn.Dropout2d(p=0.1))
 
             if hg_module < self.num_modules - 1:
                 self.add_module(
@@ -188,6 +189,8 @@ class FAN(nn.Module):
 
             ll = F.relu(self._modules['bn_end' + str(i)]
                         (self._modules['conv_last' + str(i)](ll)), True)
+
+            ll = self._modules['dropout_' + str(i)](ll)
 
             # Predict heatmaps
             tmp_out = self._modules['l' + str(i)](ll)
