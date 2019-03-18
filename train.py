@@ -92,7 +92,7 @@ def main(args):
     network_size = int(NetworkSize.LARGE)
     face_alignment_net = FAN(network_size)
     # fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
-    fan_D = ResDiscriminator(in_channels=71, ndf=128, ndlayers=1, use_sigmoid=True) #3-ch image + 68-ch heatmap
+    fan_D = ResDiscriminator(in_channels=71, ndf=32, ndlayers=1, use_sigmoid=True) #3-ch image + 68-ch heatmap
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
