@@ -181,7 +181,7 @@ def main(args):
         save_dir = os.path.join(args.checkpoint, D)
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-        loss, acc, predictions, auc = validate(val_loader, model, criterion, args.netType,
+        loss, loss_depth, acc, predictions, auc = validate(val_loader, model, criterion, args.netType,
                                                         args.debug, args.flip, device=device)
         save_pred(predictions, checkpoint=save_dir)
         return
