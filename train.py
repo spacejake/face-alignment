@@ -493,6 +493,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            io.imsave("val_input-with-hm64.png",sample_hm)
+            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+            io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
         depth_inp = torch.cat((input_var, heatmaps), 1)
         depth_pred = model.Depth(depth_inp).detach()
