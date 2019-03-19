@@ -93,8 +93,8 @@ def main(args):
     network_size = int(NetworkSize.LARGE)
     face_alignment_net = FAN(network_size)
     # fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
-    #fan_D = ResDiscriminator(in_channels=71, ndf=32, ndlayers=1, use_sigmoid=True) #3-ch image + 68-ch heatmap
-    fan_D = NLayerDiscriminator(input_nc=71, ndf=16, n_layers=1, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
+    fan_D = ResDiscriminator(in_channels=71, ndf=8, ndlayers=1, use_sigmoid=True) #3-ch image + 68-ch heatmap
+    # fan_D = NLayerDiscriminator(input_nc=71, ndf=16, n_layers=1, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
     depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
@@ -372,7 +372,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
         depth_inp = torch.cat((input_var, target_hm256), 1)
         depth_pred = model.Depth(depth_inp)
-        target_hm256 = target_hm256.cpu()
 
         # Supervision
         input_var = input_var.cpu()
@@ -408,7 +407,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         lossDepth.backward()
         optimizer.Depth.step()
 
-        # pts_img = get_preds(target_hm256)
+        # pts_img = get_preds(target_hm256.cpu())
         # pts_img = torch.cat((pts_img, depth_pred.unsqueeze(2)), 2)
 
         pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
@@ -567,8 +566,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             acc=acces.avg)
         bar.next()
 
-        if val_idx % 5 == 0:
-            break
+        # if val_idx % 5 == 0:
+        #     break
 
     bar.finish()
     mean_error = torch.mean(all_dists)
