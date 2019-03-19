@@ -14,6 +14,8 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+from torch.utils.model_zoo import load_url
+from torchvision import transforms
 import itertools
 
 from face_alignment import models
@@ -38,6 +40,12 @@ model_names = sorted(
 best_acc = 0.
 best_auc = 0.
 idx = range(1, 69, 1)
+
+models_urls = {
+    '2DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/2DFAN4-11f355bf06.pth.tar',
+    '3DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/3DFAN4-7835d9f11d.pth.tar',
+    'depth': 'https://www.adrianbulat.com/downloads/python-fan/depth-2a464da4ea.pth.tar',
+}
 
 class Model(NamedTuple):
     FAN: torch.nn.Module
@@ -137,10 +145,12 @@ def main(args):
             args.start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
 
-            # model.FAN.load_state_dict(checkpoint['state_dict'])
-            fan_weights = {
-                k.replace('module.', ''): v for k,
-                v in checkpoint['state_dict'].items()}
+            ## model.FAN.load_state_dict(checkpoint['state_dict'])
+            fan_weights = load_url(models_urls['3DFAN-4'], map_location=lambda storage, loc: storage)
+
+            # fan_weights = {
+            #     k.replace('module.', ''): v for k,
+            #     v in checkpoint['state_dict'].items()}
             model.FAN.load_state_dict(fan_weights)
 
             optimizer.FAN.load_state_dict(checkpoint['optimizer'])
@@ -158,11 +168,11 @@ def main(args):
             checkpoint = torch.load(args.resume_depth)
             args.start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
-
-            # model.Depth.load_state_dict(checkpoint['state_dict'])
+            checkpointDepth = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
+            ## model.Depth.load_state_dict(checkpoint['state_dict'])
             depth_weights = {
                 k.replace('module.', ''): v for k,
-                v in checkpoint['state_dict'].items()}
+                v in checkpointDepth['state_dict'].items()}
             model.Depth.load_state_dict(depth_weights)
 
             optimizer.Depth.load_state_dict(checkpoint['optimizer'])
