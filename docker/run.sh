@@ -13,6 +13,6 @@ xhost +local:root; \
     -v $PWD/../:/workspace/src:rw \
     -v $data_path:/workspace/dataset:rw \
     -v /dev/bus/usb:/dev/bus/usb \
-    morto067/telef-alignment
+    morto067/pytorch-cuda9.0-ubuntu16.04
 
 
