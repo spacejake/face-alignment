@@ -138,7 +138,7 @@ def show_joints3D(pts):
     surf = ax.scatter(pts_numpy[:, 0] * 1.2, pts_numpy[:, 1], pts_numpy[:, 2], c=pts_numpy[:, 2], alpha=1.0, edgecolor='b')
     ax.view_init(elev=90., azim=90., )
     ax.set_xlim(ax.get_xlim()[::-1])
-    plt.show()
+    # plt.show()
     plt.savefig("3dPoints.png")
     plt.close()
 
@@ -154,9 +154,9 @@ def show_heatmap(target, outname="heatmap.png"):
         for p in range(num_joints):
             out += target[n,p,:,:]
 
-        plt.imshow(color_heatmap(out))
-        plt.show()
-        plt.savefig(outname)
+        # plt.imshow(color_heatmap(out))
+        # plt.show()
+        plt.imsave(outname, color_heatmap(out))
         plt.close()
 
 def sample_with_heatmap(inp, out, num_rows=2, parts_to_show=None):
