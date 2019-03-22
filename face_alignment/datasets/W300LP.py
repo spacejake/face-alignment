@@ -122,7 +122,7 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i], ptsTransMat)
-                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i], 2)
+                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i]-1, 2)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -133,7 +133,7 @@ class W300LP(data.Dataset):
         transMat = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
-                tpts[i, 0:2] = transform(tpts[i, 0:2]+1, transMat)
+                tpts[i, 0:2] = transform(tpts[i, 0:2], transMat)
                 heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i]-1, 1)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 

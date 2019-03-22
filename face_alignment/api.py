@@ -50,8 +50,8 @@ models_urls = {
 }
 
 models_chkpts = {
-    '3DFAN-4': '../checkpoint/checkpointFAN.pth.tar',
-    'depth': '../checkpoint/checkpointDepth.pth.tar',
+    '3DFAN-4': '../ckpnt-gan-v2/checkpointFAN.pth.tar',
+    'depth': '../ckpnt-gan-v2/checkpointDepth.pth.tar',
 }
 
 class FaceAlignment:
@@ -81,8 +81,10 @@ class FaceAlignment:
             network_name = '3DFAN-' + str(network_size)
 
         if remote:
+            print("Using Pre-trained weights")
             fan_weights = load_url(models_urls[network_name], map_location=lambda storage, loc: storage)
         else:
+            print("Using locally trained weights")
             fan_checkpoint = torch.load(models_chkpts[network_name])
             # fan_weights = fan_checkpoint['state_dict']
             fan_weights = {
