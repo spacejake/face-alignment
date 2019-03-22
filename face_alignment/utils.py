@@ -120,8 +120,8 @@ def transform(point, transform, invert=False):
         inverse transformation matrix (default: {False})
     """
     _pt = torch.ones(3)
-    _pt[0] = point[0] - 1
-    _pt[1] = point[1] - 1
+    _pt[0] = point[0]
+    _pt[1] = point[1]
 
     if invert:
         transform = torch.inverse(transform)

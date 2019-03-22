@@ -195,7 +195,7 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+        adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
         lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
