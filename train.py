@@ -21,7 +21,7 @@ from face_alignment.api import NetworkSize
 from face_alignment.models import FAN, ResNetDepth
 from face_alignment.utils import *
 
-from face_alignment.datasets.W300LP import W300LP
+from face_alignment.datasets.W300LP import W300LP, compute_laplacian
 from face_alignment.datasets.common import Target
 
 
@@ -55,6 +55,7 @@ class Model(NamedTuple):
 class Criterion(NamedTuple):
     hm: torch.nn.Module
     pts: torch.nn.Module
+    laplacian: torch.nn.Module
 
 class Optimizer(NamedTuple):
     FAN: torch.optim.Optimizer
@@ -105,9 +106,10 @@ def main(args):
     model = Model(face_alignment_net, depth_net)
 
     # Loss Functions
-    hm_crit = torch.nn.MSELoss(size_average=True).to(device)
+    hm_crit = torch.nn.MSELoss(reduction='mean').to(device)
     pnt_crit = torch.nn.MSELoss(reduction='mean').to(device)
-    criterion = Criterion(hm_crit, pnt_crit)
+    lap_crit = torch.nn.L1Loss().to(device)
+    criterion = Criterion(hm_crit, pnt_crit, lap_crit)
 
     # Optimization
     optimizerFan = torch.optim.RMSprop(
@@ -150,7 +152,7 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Train Depth Loss', 'Train Laplacian Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     if args.resume_depth:
         if os.path.isfile(args.resume_depth):
@@ -186,8 +188,9 @@ def main(args):
         save_pred(predictions, checkpoint=save_dir)
         return
 
+    train_dataset = Loader(args, split='train')
     train_loader = torch.utils.data.DataLoader(
-        Loader(args, split='train'),
+        train_dataset,
         batch_size=args.train_batch,
         shuffle=True,
         num_workers=args.workers,
@@ -199,14 +202,15 @@ def main(args):
         lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
-        train_loss, train_losslmk, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
-                                      debug=args.debug, flip=args.flip, device=device)
+        train_loss, train_lossreg, train_lossdepth, train_losslap, train_acc = \
+            train(train_loader, model, criterion, optimizer, args.netType, epoch, train_dataset.laplcian,
+                  debug=args.debug, flip=args.flip, device=device)
 
         # do not save predictions in model file
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, train_losslmk, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_lossreg, train_lossdepth, train_losslap, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
@@ -243,11 +247,14 @@ def main(args):
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
 
-def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=False, flip=False, device='cuda:0'):
+def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
+          iter=0, debug=False, flip=False, device='cuda:0'):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-    losseslmk = AverageMeter()
+    lossesRegressor = AverageMeter()
+    lossesDepth = AverageMeter()
+    lossesLap = AverageMeter()
     acces = AverageMeter()
 
     model.train()
@@ -286,13 +293,24 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         input_var = input_var.cpu()
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
         target_pts = torch.autograd.Variable(target.pts.to(device))
-        # Intermediate supervision
+
+        # FAN Intermediate supervision
         loss = 0
         for out_inter in output:
             loss += criterion.hm(out_inter, target_hm64)
 
-        # 3D LMk Loss
+        # Depth Loss
         lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
+
+        # Laplacian Loss
+        target_lap = torch.autograd.Variable(target.lap_pts.to(device))
+        tpts256, pts_orig = get_preds_fromhm(target_hm256)
+        pred_pts256 = torch.cat((tpts256.to(device), depth_pred.unsqueeze(2)), 2)
+        pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts256)
+        lossLap = criterion.laplacian(pred_lap, target_lap)
+
+        lossRegressor = lossDepth + lossLap
+
         depth_pred = depth_pred.cpu()
 
         # Back-prop
@@ -301,7 +319,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         optimizer.FAN.step()
 
         optimizer.Depth.zero_grad()
-        lossDepth.backward()
+        lossRegressor.backward()
         optimizer.Depth.step()
 
         # pts_img = get_preds(target_hm256)
@@ -313,7 +331,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
-        losseslmk.update(lossDepth.data, inputs.size(0))
+        #lossRegressor = lossDepth + lossLap
+        lossesRegressor.update(lossRegressor.data, inputs.size(0))
+        lossesDepth.update(lossDepth.data, inputs.size(0))
+        lossesLap.update(lossLap.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         if loader_idx % 50 == 0:
@@ -330,7 +351,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         batch_time.update(time.time() - end)
         end = time.time()
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
+                     'Loss: {loss:.4f} | ' \
+                     'LossRegressor: {lossReg:.4f} | lossDepth: {lossDepth:.4f} | lossLaplacian: {lossLap:.4f} | ' \
+                     'Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
@@ -338,55 +362,15 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
-            losslmk=losseslmk.avg,
+            lossReg=lossesRegressor.avg,
+            lossDepth=lossesDepth.avg,
+            lossLap=lossesLap.avg,
             acc=acces.avg)
         bar.next()
-        # print(' Train: ({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
-        #     batch=loader_idx + 1,
-        #     size=len(loader),
-        #     data=data_time.val,
-        #     bt=batch_time.val,
-        #     total=bar.elapsed_td,
-        #     eta=bar.eta_td,
-        #     loss=losses.avg,
-        #     losslmk=losseslmk.avg,
-        #     acc=acces.avg))
 
-        # if (loader_idx+1) % 50 == 0:
-        #     break
-
-        # save every once and awhile
-        # if (loader_idx+1) % 1000 == 0:
-        #     save_checkpoint(
-        #         {
-        #             'epoch': epoch + 1,
-        #             'inter': loader_idx + 1,
-        #             'netType': args.netType,
-        #             'state_dict': model.FAN.state_dict(),
-        #             'best_acc': best_auc,
-        #             'optimizer': optimizer.FAN.state_dict(),
-        #         },
-        #         is_best=False,
-        #         # predictions,
-        #         checkpoint=args.checkpoint,
-        #         filename="checkpointFAN{}.pth.tar".format(loader_idx+1))
-        #
-        #     save_checkpoint(
-        #         {
-        #             'epoch': epoch + 1,
-        #             'inter': loader_idx + 1,
-        #             'netType': args.netType,
-        #             'state_dict': model.Depth.state_dict(),
-        #             'best_acc': best_auc,
-        #             'optimizer': optimizer.Depth.state_dict(),
-        #         },
-        #         is_best=False,
-        #         # predictions,
-        #         checkpoint=args.checkpoint,
-        #         filename="checkpointDepth{}.pth.tar".format(loader_idx+1))
     bar.finish()
 
-    return losses.avg, losseslmk.avg, acces.avg
+    return losses.avg, lossesRegressor.avg, lossesDepth.avg, lossesLap.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
