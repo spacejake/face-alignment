@@ -118,10 +118,10 @@ class W300LP(data.Dataset):
         # 256x256 GT Heatmap and Points
         pts = raw_pts.clone()
         heatmap256 = torch.zeros(self.nParts, 256, 256)
-        ptsTransMat = getTransform(c, s, 256, rotate=r)
+        transMat256 = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             if pts[i, 0] > 0:
-                pts[i] = transform(pts[i], ptsTransMat)
+                pts[i] = transform(pts[i], transMat256)
                 heatmap256[i] = draw_gaussian(heatmap256[i], pts[i]-1, 2)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
@@ -130,10 +130,10 @@ class W300LP(data.Dataset):
         # 64x64 Intermediate Heatmap
         tpts = raw_pts.clone()
         heatmap64 = torch.zeros(self.nParts, 64, 64)
-        transMat = getTransform(c, s, 64, rotate=r)
+        transMat64 = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
-                tpts[i, 0:2] = transform(tpts[i, 0:2], transMat)
+                tpts[i, 0:2] = transform(tpts[i, 0:2], transMat64)
                 heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i]-1, 1)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
