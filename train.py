@@ -208,7 +208,8 @@ def main(args):
 
 
     cudnn.benchmark = True
-    print('=> Total params: %.2fM' % (sum(p.numel() for p in model.FAN.parameters()) / (1024. * 1024)))
+    if train_fan:
+        print('=> Total params: %.2fM' % (sum(p.numel() for p in model.FAN.parameters()) / (1024. * 1024)))
 
     if args.evaluation:
         print('=> Evaluation only')
@@ -302,9 +303,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         data_time.update(time.time() - end)
 
         input_var = torch.autograd.Variable(inputs.to(device))
+        target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
+        target_pts = torch.autograd.Variable(target.pts.to(device))
 
         # FAN
-        loss = 0
+        loss = torch.zeros([1], dtype=torch.float32)[0]
         if train_fan:
             # Forward
             output = model.FAN(input_var)
@@ -318,9 +321,9 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
             # Supervision
             input_var = input_var.cpu()
-            target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
-            target_pts = torch.autograd.Variable(target.pts.to(device))
+            
             # Intermediate supervision
+            loss = 0
             for out_inter in output:
                 loss += criterion.hm(out_inter, target_hm64)
 
@@ -335,7 +338,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         pts = pts * 4 # 64->256
 
         # DEPTH
-        lossDepth = 0
+        lossDepth =  torch.zeros([1], dtype=torch.float32)[0]
         if train_depth:
             target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
             depth_inp = torch.cat((input_var, target_hm256), 1)
@@ -354,7 +357,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
             pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
         else:
-            pts_img = torch.cat((pts,  target.pts[:,:,2], 2))
+            pts_img = torch.cat((pts, target.pts[:,:,2].unsqueeze(2)), 2)
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
@@ -375,7 +378,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         batch_time.update(time.time() - end)
         end = time.time()
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk: .4f} | Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
