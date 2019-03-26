@@ -248,32 +248,36 @@ def main(args):
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
-        save_checkpoint(
-            {
-                'epoch': epoch + 1,
-                'netType': args.netType,
-                'state_dict': model.FAN.state_dict(),
-                'best_acc': best_auc,
-                'optimizer': optimizer.FAN.state_dict(),
-            },
-            is_best,
-            predictions,
-            checkpoint=args.checkpoint,
-            filename="checkpointFAN.pth.tar")
 
-        save_checkpoint(
-            {
-                'epoch': epoch + 1,
-                'iter': 0,
-                'netType': args.netType,
-                'state_dict': model.Depth.state_dict(),
-                'best_acc': best_auc,
-                'optimizer': optimizer.Depth.state_dict(),
-            },
-            is_best,
-            None,
-            checkpoint=args.checkpoint,
-            filename="checkpointDepth.pth.tar")
+        if train_fan:
+            save_checkpoint(
+                {
+                    'epoch': epoch + 1,
+                    'netType': args.netType,
+                    'state_dict': model.FAN.state_dict(),
+                    'best_acc': best_auc,
+                    'optimizer': optimizer.FAN.state_dict(),
+                },
+                is_best,
+                predictions,
+                checkpoint=args.checkpoint,
+                filename="checkpointFAN.pth.tar")
+
+        if train_depth:
+            save_checkpoint(
+                {
+                    'epoch': epoch + 1,
+                    'iter': 0,
+                    'netType': args.netType,
+                    'state_dict': model.Depth.state_dict(),
+                    'best_acc': best_auc,
+                    'optimizer': optimizer.Depth.state_dict(),
+                },
+                is_best,
+                None,
+                checkpoint=args.checkpoint,
+                filename="checkpointDepth.pth.tar")
+        
         savefig(os.path.join(args.checkpoint, 'log_iter.eps'))
 
     logger.close()
