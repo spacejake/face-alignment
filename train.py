@@ -330,6 +330,9 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             optimizer.FAN.step()
         else:
             out_hm = target.heatmap64
+        
+        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+        pts = pts * 4 # 64->256
 
         # DEPTH
         lossDepth = 0
@@ -349,9 +352,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             lossDepth.backward()
             optimizer.Depth.step()
 
-        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-        pts = pts * 4 # 64->256
-        pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
+            pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
+        else:
+            pts_img = torch.cat((pts,  target.pts[:,:,2], 2)
+
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
@@ -428,7 +432,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             target_pts = target.pts.to(device)
             for o in output:
                 loss += criterion.hm(o, target_var)
-        else
+        else:
             out_hm = target.heatmap64
 
         pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
@@ -465,7 +469,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             depth_pred = depth_pred.cpu()
             pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
         else:
-            pts_img = torch.cat((pts.data, target.pts[:,2]), 2)
+            pts_img = torch.cat((pts.data, target.pts[:,:,2]), 2)
 
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
