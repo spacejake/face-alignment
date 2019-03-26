@@ -44,8 +44,10 @@ class Model(NamedTuple):
     Depth: torch.nn.Module
 
     def eval(self):
-        self.FAN.eval()
-        self.Depth.eval()
+        if self.FAN is not None:
+            self.FAN.eval()
+        if self.Depth is not None:
+            self.Depth.eval()
 
     def train(self):
         if self.FAN is not None:
@@ -419,8 +421,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         data_time.update(time.time() - end)
 
         input_var = torch.autograd.Variable(inputs.to(device))
+        target_var = target.heatmap64.to(device)
+        target_pts = target.pts.to(device)
 
-        loss = 0
+        loss = torch.zeros([1], dtype=torch.float32)[0]
         if val_fan:
             output = model.FAN(input_var)
             out_hm = output[-1]
@@ -431,8 +435,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
             out_hm = out_hm.cpu()
 
-            target_var = target.heatmap64.to(device)
-            target_pts = target.pts.to(device)
             for o in output:
                 loss += criterion.hm(o, target_var)
         else:
@@ -461,7 +463,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
-        lossDepth = 0
+        lossDepth = torch.zeros([1], dtype=torch.float32)[0]
         if val_depth:
             depth_inp = torch.cat((input_var, heatmaps), 1)
             depth_pred = model.Depth(depth_inp).detach()
@@ -472,7 +474,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             depth_pred = depth_pred.cpu()
             pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
         else:
-            pts_img = torch.cat((pts.data, target.pts[:,:,2]), 2)
+            pts_img = torch.cat((pts.data, target.pts[:,:,2].unsqueeze(2)), 2)
 
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
