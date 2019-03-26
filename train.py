@@ -354,7 +354,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
             pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
         else:
-            pts_img = torch.cat((pts,  target.pts[:,:,2], 2)
+            pts_img = torch.cat((pts,  target.pts[:,:,2], 2))
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
