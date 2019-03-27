@@ -127,8 +127,8 @@ class W300LP(data.Dataset):
         transMat256 = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             if pts[i, 0] > 0:
-                pts[i] = transform(pts[i], transMat256)
-                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i]-1, 2)
+                pts[i, 0:2] = transform(pts[i, 0:2], transMat256)
+                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i, 0:2]-1, 2)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -140,7 +140,7 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i, 0:2] = transform(tpts[i, 0:2], transMat64)
-                heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i]-1, 1)
+                heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         # Compute Target Laplacian vectors

@@ -130,10 +130,11 @@ def transform(point, transform, invert=False):
 
     if len(point) == 3:
         new_point[2] = point[2]
+        new_point[0:2] = new_point[0:2].int() + 1
     else:
-        new_point = new_point[0:2]
+        new_point = new_point[0:2].int() + 1
 
-    return new_point.int() + 1
+    return new_point
 
 # def transform(point, center, scale, resolution, invert=False):
 #     """apply affine transformation matrix to point.
