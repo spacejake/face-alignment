@@ -337,9 +337,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             
             # Intermediate supervision
             loss = 0
+            # the heatmap is a 0-1 2D matrix, the value of 1 is the xy-coord of the target 2D point
             weighted_mask = target_hm64
             for out_inter in output:
-                loss +=  criterion.hm(weighted_mask * out_inter, weighted_mask * target_hm64)
+                loss += criterion.hm(out_inter, target_hm64)
+                loss += criterion.hm(weighted_mask * out_inter, weighted_mask * target_hm64)
 
             # Back-prop
             optimizer.FAN.zero_grad()
