@@ -337,7 +337,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             
             # Intermediate supervision
             loss = 0
-            weighted_mask = 1e1 * target_hm64
+            weighted_mask = target_hm64
             for out_inter in output:
                 loss +=  criterion.hm(weighted_mask * out_inter, weighted_mask * target_hm64)
 
