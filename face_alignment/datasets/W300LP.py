@@ -12,7 +12,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import torch
 import torch.utils.data as data
 
-from .common import Split, Target
+from face_alignment.datasets.common import Split, Target
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
@@ -186,7 +186,7 @@ if __name__=="__main__":
     import face_alignment.util.opts as opts
 
     args = opts.argparser()
-
+    args.data = "../../"+args.data
     # dataset = W300LP(args, Split.test)
     datasetLoader = get_loader(args.data)
     crop_win = None
