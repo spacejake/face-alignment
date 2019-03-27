@@ -44,6 +44,8 @@ def argparser():
     P.add_argument(
         '--start-epoch', default=0, type=int, help='manual epoch number (useful on restarts)')
     P.add_argument('--device', type=str, default='cuda:0', help='device to load and run model')
+    P.add_argument('--train-fan', help='Specifically train FAN', action='store_true')
+    P.add_argument('--train-depth', help='Specifically train Depth', action='store_true')
     args = P.parse_args()
 
     return args
