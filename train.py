@@ -233,8 +233,15 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
-        lr = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
+        if optimizer.FAN is not None:
+            lr_fan = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+
+        if optimizer.Depth is not None:
+            lr_depth = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
+
+        # New Learning rate
+        lr = lr_fan if optimizer.FAN is not None else lr_depth
+
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
         train_loss, train_losslmk, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
