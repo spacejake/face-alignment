@@ -376,7 +376,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             tpts256 = target_pts[:, :, 0:2]
             pred_pts256 = torch.cat((tpts256.to(device), depth_pred.unsqueeze(2)), 2)
             pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts256)
-            lossLap = 1e-2 * criterion.laplacian(pred_lap, target_lap)
+            lossLap = 1e-1 * criterion.laplacian(pred_lap, target_lap)
 
             lossRegressor = lossDepth + lossLap
 
