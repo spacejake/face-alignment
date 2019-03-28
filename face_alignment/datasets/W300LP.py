@@ -13,9 +13,10 @@ import torch
 import torch.utils.data as data
 
 from face_alignment.datasets.common import Split, Target
-from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian
+from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
+
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -121,8 +122,9 @@ class W300LP(data.Dataset):
         transMat256 = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             if pts[i, 0] > 0:
-                pts[i, 0:2] = transform(pts[i, 0:2], transMat256)
-                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i, 0:2]-1, 2)
+                pts[i] = transform(pts[i], transMat256)
+                pts[i, :2] = pts[i, :2]-1
+                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i, 0:2], 2)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -133,7 +135,7 @@ class W300LP(data.Dataset):
         transMat64 = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
-                tpts[i, 0:2] = transform(tpts[i, 0:2], transMat64)
+                tpts[i] = transform(tpts[i], transMat64)
                 heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
@@ -179,17 +181,28 @@ if __name__=="__main__":
     loader = torch.utils.data.DataLoader(
         datasetLoader(args, 'train'),
         batch_size=1,
-        shuffle=True,
-        num_workers=args.workers,
+        #shuffle=True,
+        num_workers=1,
         pin_memory=True)
     for i, data in enumerate(loader):
         input, label = data
         target = Target._make(label)
-        show_joints(input.squeeze(0), target.pts.squeeze(0))
         show_joints3D(target.pts.squeeze(0))
-        show_heatmap(target.heatmap64)
-        show_heatmap(target.heatmap256)
-        test_hmpred = get_preds(target.heatmap256)
+        show_joints(input.squeeze(0), target.pts.squeeze(0))
+        #show_heatmap(target.heatmap64)
+        #show_heatmap(target.heatmap256)
+
+        # TEST 256 heatmap extraction
+        test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+
+        # TEST 64 heatmap extraction
+        test_hmpred, _ = get_preds_fromhm(target.heatmap64, target.center, target.scale)
+        test_hmpred = test_hmpred * 4 # 64->256
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+
+        # Test other method
+        test_hmpred = get_preds(target.heatmap64) * 4
         show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         plt.pause(0.5)
