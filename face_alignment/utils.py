@@ -263,6 +263,8 @@ def get_preds_fromhm(hm, center=None, scale=None):
         center {torch.tensor} -- the center of the bounding box (default: {None})
         scale {float} -- face scale (default: {None})
     """
+    width = (hm.size(2) - 1)
+    height = (hm.size(3) - 1)
     max, idx = torch.max(
         hm.view(hm.size(0), hm.size(1), hm.size(2) * hm.size(3)), 2)
     idx += 1
@@ -274,7 +276,7 @@ def get_preds_fromhm(hm, center=None, scale=None):
         for j in range(preds.size(1)):
             hm_ = hm[i, j, :]
             pX, pY = int(preds[i, j, 0]) - 1, int(preds[i, j, 1]) - 1
-            if pX > 0 and pX < hm.size(2) and pY > 0 and pY < hm.size(3):
+            if pX > 0 and pX < width and pY > 0 and pY < height:
                 diff = torch.FloatTensor(
                     [hm_[pY, pX + 1] - hm_[pY, pX - 1],
                      hm_[pY + 1, pX] - hm_[pY - 1, pX]])

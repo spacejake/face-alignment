@@ -333,8 +333,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             out_hm = out_hm.cpu()
 
             # Supervision
-            input_var = input_var.cpu()
-            
             # Intermediate supervision
             loss = 0
             # the heatmap is a 0-1 2D matrix, the value of 1 is the xy-coord of the target 2D point
