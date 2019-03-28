@@ -339,8 +339,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             out_hm = out_hm.cpu()
 
             # Supervision
-            input_var = input_var.cpu()
-            
             # Intermediate supervision
             loss = 0
             for out_inter in output:
