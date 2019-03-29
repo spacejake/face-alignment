@@ -323,43 +323,41 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
+        target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
         target_pts = torch.autograd.Variable(target.pts.to(device))
 
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
         if train_fan:
             # Forward
-            output = model.FAN(input_var)
-            out_hm = output[-1]
+            out_hm, output = model.FAN(input_var)
 
             if flip:
-                flip_output = model.FAN(flip(out_hm[-1].clone()), is_label=True)
-                out_hm += flip(flip_output[-1])
-
-            out_hm = out_hm.cpu()
+                flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
+                out_hm += flip(flip_out_hm.detach())
 
             # Supervision
             # Intermediate supervision
-            loss = 0
-            for out_inter in output:
-                loss += criterion.hm(out_inter, target_hm64)
+            for o in output:
+                loss += criterion.hm(o, target_hm64)
+
+            #Final Loss
+            loss += criterion.hm(out_hm, target_hm256)
 
             # Back-prop
             optimizer.FAN.zero_grad()
             loss.backward()
             optimizer.FAN.step()
         else:
-            out_hm = target.heatmap64
+            out_hm = target.heatmap256
         
         pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-        pts = pts * 4 # 64->256
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
         lossDepth =  torch.zeros([1], dtype=torch.float32)[0]
         lossLap =  torch.zeros([1], dtype=torch.float32)[0]
         if train_depth:
-            target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
             depth_inp = torch.cat((input_var, target_hm256), 1)
             depth_pred = model.Depth(depth_inp)
             target_hm256 = target_hm256.cpu()
@@ -402,9 +400,9 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             show_joints3D(pts_img.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
-            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm256.png")
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="hm256_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("input-with-hm64.png",sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("input-with-gt-hm64.png",sample_hm)
@@ -458,50 +456,51 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_var = target.heatmap64.to(device)
+        target_var256 = target.heatmap256.to(device)
         target_pts = target.pts.to(device)
 
         loss = torch.zeros([1], dtype=torch.float32)[0]
         if val_fan:
-            output = model.FAN(input_var)
-            out_hm = output[-1]
+            out_hm, output = model.FAN(input_var)
 
             if flip:
-                flip_output = model.FAN(flip(out_hm[-1].detach()), is_label=True)
-                out_hm += flip(flip_output[-1])
-
-            out_hm = out_hm.cpu()
+                flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
+                out_hm += flip(flip_out_hm.detach())
 
             for o in output:
                 loss += criterion.hm(o, target_var)
+
+            loss += criterion.hm(out_hm, target_var256)
         else:
-            out_hm = target.heatmap64
+            out_hm = target.heatmap256
 
         pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
-        pts = pts * 4 # 64->256
+        # pts = pts * 4 # 64->256
 
         # if self.landmarks_type == LandmarksType._3D:
-        heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-        tpts = pts.clone()
-        for b in range(pts.size(0)):
-            for n in range(68):
-                if tpts[b, n, 0] > 0:
-                    heatmaps[b, n] = draw_gaussian(
-                        heatmaps[b, n], tpts[b, n], 2)
-        heatmaps = heatmaps.to(device)
+        # heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
+        # tpts = pts.clone()
+        # for b in range(pts.size(0)):
+        #     for n in range(68):
+        #         if tpts[b, n, 0] > 0:
+        #             heatmaps[b, n] = draw_gaussian(
+        #                 heatmaps[b, n], tpts[b, n], 2)
+        # heatmaps = heatmaps.to(device)
 
         if val_idx % 50 == 0:
-            show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
+            show_heatmap(output[-1].data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
-            show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
+            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
-            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("val_input-with-hm64.png",sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
+
         if val_depth:
-            depth_inp = torch.cat((input_var, heatmaps), 1)
+            depth_inp = torch.cat((input_var, out_hm.detach()), 1)
             depth_pred = model.Depth(depth_inp).detach()
 
             # intermediate supervision

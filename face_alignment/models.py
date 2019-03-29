@@ -141,6 +141,16 @@ class HourGlass(nn.Module):
     def forward(self, x):
         return self._forward(self.depth, x)
 
+class Interpolate(nn.Module):
+    def __init__(self, size, mode):
+        super(Interpolate, self).__init__()
+        self.interp = nn.functional.interpolate
+        self.size = size
+        self.mode = mode
+
+    def forward(self, x):
+        x = self.interp(x, size=self.size, mode=self.mode)
+        return x
 
 class FAN(nn.Module):
 
@@ -170,11 +180,27 @@ class FAN(nn.Module):
                     'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
                 self.add_module('al' + str(hg_module), nn.Conv2d(68,
                                                                  256, kernel_size=1, stride=1, padding=0))
+        # output
+        output_sequence = [
+            nn.Conv2d(196, 68, kernel_size=3, stride=1, padding=1), # Cat Downsameple (128) with result HG_out(68)
+            Interpolate(size=(128,128), mode='nearest'), # 64 -> 128
+            nn.Conv2d(68, 68, kernel_size=3, stride=1, padding=1),
+            Interpolate(size=(256, 256), mode='nearest'), # 128 -> 256
+            nn.Conv2d(68, 68, kernel_size=1, stride=1, padding=0), #out
+        ]
+
+        self.output_layer = nn.Sequential(*output_sequence)
+
+        # self.out1 = nn.Conv2d(196, 68, kernel_size=4, stride=1, padding=2)  # Cat Downsameple (128) with result HG_out(68)
+        # self.outUp1 = Interpolate(size=(128,128), mode='nearest') # 64 -> 128
+        # self.out2 = nn.Conv2d(68, 68, kernel_size=4, stride=1, padding=2)
+        # self.outUp2 = Interpolate(size=(256, 256), mode='nearest') # 128 -> 256
+        # self.out3 = nn.Conv2d(68, 68, kernel_size=3, stride=1, padding=1) #out
 
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)), True)
-        x = F.avg_pool2d(self.conv2(x), 2, stride=2)
-        x = self.conv3(x)
+        downsample = F.avg_pool2d(self.conv2(x), 2, stride=2)
+        x = self.conv3(downsample)
         x = self.conv4(x)
 
         previous = x
@@ -198,8 +224,15 @@ class FAN(nn.Module):
                 tmp_out_ = self._modules['al' + str(i)](tmp_out)
                 previous = previous + ll + tmp_out_
 
-        return outputs
+        out = torch.cat((downsample, outputs[-1]), 1)
+        out = self.output_layer(out)
+        # out = self.out1(out)
+        # out = self.outUp1(out)
+        # out = self.out2(out)
+        # out = self.outUp2(out)
+        # out = self.out3(out)
 
+        return out, outputs
 
 class ResNetDepth(nn.Module):
 
