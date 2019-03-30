@@ -467,6 +467,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                 flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
                 out_hm += flip(flip_out_hm.detach())
 
+            loss = 0
             for o in output:
                 loss += criterion.hm(o, target_var)
 
@@ -474,7 +475,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         else:
             out_hm = target.heatmap256
 
-        pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
+        pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
         # pts = pts * 4 # 64->256
 
         # if self.landmarks_type == LandmarksType._3D:
@@ -488,7 +489,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         # heatmaps = heatmaps.to(device)
 
         if val_idx % 50 == 0:
-            show_heatmap(output[-1].data[0].unsqueeze(0), outname="val_hm64.png")
+            show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
