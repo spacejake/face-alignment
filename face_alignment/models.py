@@ -175,18 +175,30 @@ class FAN(nn.Module):
             self.add_module('l' + str(hg_module), nn.Conv2d(256,
                                                             68, kernel_size=1, stride=1, padding=0))
 
-            if hg_module < self.num_modules - 1:
-                self.add_module(
-                    'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
-                self.add_module('al' + str(hg_module), nn.Conv2d(68,
-                                                                 256, kernel_size=1, stride=1, padding=0))
+            # if hg_module < self.num_modules - 1:
+            self.add_module(
+                'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
+            self.add_module('al' + str(hg_module), nn.Conv2d(68,
+                                                             256, kernel_size=1, stride=1, padding=0))
+
+        downsample_seq = [
+            conv3x3(256, 256),
+            nn.BatchNorm2d(256),
+        ]
+        self.downsample_layer = nn.Sequential(*downsample_seq)
+
         # output
         output_sequence = [
-            nn.Conv2d(196, 68, kernel_size=3, stride=1, padding=1), # Cat Downsameple (128) with result HG_out(68)
-            Interpolate(size=(128,128), mode='nearest'), # 64 -> 128
-            nn.Conv2d(68, 68, kernel_size=3, stride=1, padding=1),
-            Interpolate(size=(256, 256), mode='nearest'), # 128 -> 256
-            nn.Conv2d(68, 68, kernel_size=1, stride=1, padding=0), #out
+            ConvBlock(256, 256),
+            Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
+            conv3x3(256, 128),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
+            conv3x3(128, 128),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128,68,kernel_size=1, stride=1, padding=0)
         ]
 
         self.output_layer = nn.Sequential(*output_sequence)
@@ -197,8 +209,8 @@ class FAN(nn.Module):
         # self.outUp2 = Interpolate(size=(256, 256), mode='nearest') # 128 -> 256
         # self.out3 = nn.Conv2d(68, 68, kernel_size=3, stride=1, padding=1) #out
 
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)), True)
+    def forward(self, input):
+        x = F.relu(self.bn1(self.conv1(input)), True)
         downsample = F.avg_pool2d(self.conv2(x), 2, stride=2)
         x = self.conv3(downsample)
         x = self.conv4(x)
@@ -219,13 +231,16 @@ class FAN(nn.Module):
             tmp_out = self._modules['l' + str(i)](ll)
             outputs.append(tmp_out)
 
+            ll = self._modules['bl' + str(i)](ll)
+            tmp_out_ = self._modules['al' + str(i)](tmp_out)
+
             if i < self.num_modules - 1:
-                ll = self._modules['bl' + str(i)](ll)
-                tmp_out_ = self._modules['al' + str(i)](tmp_out)
                 previous = previous + ll + tmp_out_
 
-        out = torch.cat((downsample, outputs[-1]), 1)
+        # x = self.downsample_layer(x)
+        out = self.downsample_layer(x) + ll + tmp_out_
         out = self.output_layer(out)
+
         # out = self.out1(out)
         # out = self.outUp1(out)
         # out = self.out2(out)

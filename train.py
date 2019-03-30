@@ -334,10 +334,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
             if flip:
                 flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
-                out_hm += flip(flip_out_hm.detach())
+                out_hm += flip(flip_out_hm)
 
             # Supervision
             # Intermediate supervision
+            loss = 0
             for o in output:
                 loss += criterion.hm(o, target_hm64)
 
@@ -360,7 +361,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         if train_depth:
             depth_inp = torch.cat((input_var, target_hm256), 1)
             depth_pred = model.Depth(depth_inp)
-            target_hm256 = target_hm256.cpu()
 
             # Supervision
             # Depth Loss
