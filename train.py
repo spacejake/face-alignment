@@ -495,6 +495,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
+            show_heatmap(heatmaps[0], outname="val_hm256_pts.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("val_input-with-hm64.png",sample_hm)
