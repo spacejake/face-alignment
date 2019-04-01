@@ -125,7 +125,7 @@ def accuracy_points(pred, target, idxs, thr=0.08):
     cnt = 0
 
     mean_dists = torch.mean(dists, 0)
-    acc[0] = mean_dists.le(thr).sum() * 1.0 / pred.size(0)
+    acc[0] = mean_dists.le(thr).sum() / pred.size(0)
     # for i in range(len(idxs)):
     #     acc[i+1] = dist_acc(dists[idxs[i]-1], thr=thr)
     #     if acc[i+1] >= 0:

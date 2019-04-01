@@ -479,14 +479,17 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         # pts = pts * 4 # 64->256
 
         # if self.landmarks_type == LandmarksType._3D:
-        # heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-        # tpts = pts.clone()
-        # for b in range(pts.size(0)):
-        #     for n in range(68):
-        #         if tpts[b, n, 0] > 0:
-        #             heatmaps[b, n] = draw_gaussian(
-        #                 heatmaps[b, n], tpts[b, n], 2)
-        # heatmaps = heatmaps.to(device)
+        if val_fan:
+            heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
+            tpts = pts.clone()
+            for b in range(pts.size(0)):
+                for n in range(68):
+                    if tpts[b, n, 0] > 0:
+                        heatmaps[b, n] = draw_gaussian(
+                            heatmaps[b, n], tpts[b, n], 2)
+            heatmaps = heatmaps.to(device)
+        else:
+            heatmaps = target.heatmap256
 
         if val_idx % 50 == 0:
             show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
@@ -501,7 +504,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
 
         if val_depth:
-            depth_inp = torch.cat((input_var, out_hm.detach()), 1)
+            depth_inp = torch.cat((input_var, heatmaps), 1)
             depth_pred = model.Depth(depth_inp).detach()
 
             # intermediate supervision
@@ -552,7 +555,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
     bar.finish()
     mean_error = torch.mean(all_dists)
-    auc = calc_metrics(all_dists, path=args.checkpoint, category="300W-LP-3D") # this is auc of predicted maps and target.
+    auc = calc_metrics(all_dists, path=args.checkpoint) # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
     return losses.avg, losseslmk.avg, acces.avg, predictions, auc
 
