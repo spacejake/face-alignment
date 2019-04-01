@@ -464,8 +464,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             out_hm, output = model.FAN(input_var)
 
             if flip:
-                flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
-                out_hm += flip(flip_out_hm.detach())
+                flip_out_hm, _ = model.FAN(flip(input_var))
+                out_hm += flip(flip_out_hm.detach(), is_label=True)
 
             loss = 0
             for o in output:
@@ -473,6 +473,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
             loss += criterion.hm(out_hm, target_var256)
         else:
+            output = target.heatmap64.unsqueeze(0)
             out_hm = target.heatmap256
 
         pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
@@ -489,13 +490,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                             heatmaps[b, n], tpts[b, n], 2)
             heatmaps = heatmaps.to(device)
         else:
-            heatmaps = target.heatmap256
+            heatmaps = target.heatmap256.to(device)
 
         if val_idx % 50 == 0:
             show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
-            show_heatmap(heatmaps[0], outname="val_hm256_pts.png")
+            show_heatmap(heatmaps[0].cpu().unsqueeze(0), outname="val_hm256_pts.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("val_input-with-hm64.png",sample_hm)

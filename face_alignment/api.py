@@ -50,8 +50,8 @@ models_urls = {
 }
 
 models_chkpts = {
-    '3DFAN-4': '../checkpoint/checkpointFAN.pth.tar',
-    'depth': '../checkpoint/checkpointDepth.pth.tar',
+    '3DFAN-4': '../ckpnt-fan256-v1/checkpointFAN.pth.tar',
+    'depth': '../ckpnt-laplacian-v1.2/checkpointDepth.pth.tar',
 }
 
 class FaceAlignment:
@@ -173,14 +173,16 @@ class FaceAlignment:
             inp = inp.to(self.device)
             inp.div_(255.0).unsqueeze_(0)
 
-            out = self.face_alignment_net(inp)[-1].detach()
+            out, _ = self.face_alignment_net(inp)
+            out = out.detach()
             if self.flip_input:
-                out += flip(self.face_alignment_net(flip(inp))
-                            [-1].detach(), is_label=True)
+                flip_out_hm, _= self.face_alignment_net(flip(inp))
+                out += flip(flip_out_hm.detach(), is_label=True)
+
             out = out.cpu()
 
             pts, pts_img = get_preds_fromhm(out, center.unsqueeze(0), scale.unsqueeze(0))
-            pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
+            pts, pts_img = pts.view(68, 2), pts_img.view(68, 2)
 
             if self.landmarks_type == LandmarksType._3D:
                 heatmaps = torch.zeros((68, 256, 256), dtype=torch.float)
