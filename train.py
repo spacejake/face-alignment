@@ -525,7 +525,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
     bar.finish()
     mean_error = torch.mean(all_dists)
-    auc = calc_metrics(all_dists, path=args.checkpoint, category="300W-LP-3D") # this is auc of predicted maps and target.
+    auc = calc_metrics(all_dists, path=args.checkpoint, category=None) # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
     return losses.avg, losseslmk.avg, acces.avg, predictions, auc
 
