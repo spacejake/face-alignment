@@ -244,7 +244,7 @@ class FAN(nn.Module):
         # x = self.downsample_layer(x)
         out = self.downsample_layer(x) + ll + tmp_out_
         out = self.up_layer(out)
-        out = input + out
+        out = self.input_skip(input) + out
         out = self.output_layer(out)
 
         return out, outputs
