@@ -180,6 +180,11 @@ class FAN(nn.Module):
                 'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
             self.add_module('al' + str(hg_module), nn.Conv2d(68,
                                                              256, kernel_size=1, stride=1, padding=0))
+        input_skip_seq = [
+            conv3x3(3, 128),
+            nn.BatchNorm2d(128),
+        ]
+        self.input_skip = nn.Sequential(*input_skip_seq)
 
         downsample_seq = [
             conv3x3(256, 256),
@@ -188,31 +193,30 @@ class FAN(nn.Module):
         self.downsample_layer = nn.Sequential(*downsample_seq)
 
         # output
-        output_sequence = [
+        up_sequence = [
             ConvBlock(256, 256),
             Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
             conv3x3(256, 128),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
+        ]
+        self.up_layer = nn.Sequential(*up_sequence)
+
+        output_sequence = [
+            conv3x3(128, 128),
+            nn.BatchNorm2d(128),
             conv3x3(128, 128),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.Conv2d(128,68,kernel_size=1, stride=1, padding=0)
+            nn.Conv2d(128, 68, kernel_size=1, stride=1, padding=0)
         ]
-
         self.output_layer = nn.Sequential(*output_sequence)
-
-        # self.out1 = nn.Conv2d(196, 68, kernel_size=4, stride=1, padding=2)  # Cat Downsameple (128) with result HG_out(68)
-        # self.outUp1 = Interpolate(size=(128,128), mode='nearest') # 64 -> 128
-        # self.out2 = nn.Conv2d(68, 68, kernel_size=4, stride=1, padding=2)
-        # self.outUp2 = Interpolate(size=(256, 256), mode='nearest') # 128 -> 256
-        # self.out3 = nn.Conv2d(68, 68, kernel_size=3, stride=1, padding=1) #out
 
     def forward(self, input):
         x = F.relu(self.bn1(self.conv1(input)), True)
-        downsample = F.avg_pool2d(self.conv2(x), 2, stride=2)
-        x = self.conv3(downsample)
+        x = F.avg_pool2d(self.conv2(x), 2, stride=2)
+        x = self.conv3(x)
         x = self.conv4(x)
 
         previous = x
@@ -239,13 +243,9 @@ class FAN(nn.Module):
 
         # x = self.downsample_layer(x)
         out = self.downsample_layer(x) + ll + tmp_out_
+        out = self.up_layer(out)
+        out = input + out
         out = self.output_layer(out)
-
-        # out = self.out1(out)
-        # out = self.outUp1(out)
-        # out = self.out2(out)
-        # out = self.outUp2(out)
-        # out = self.out3(out)
 
         return out, outputs
 

@@ -30,9 +30,9 @@ class LandmarksType(Enum):
 
 
 class NetworkSize(Enum):
-    # TINY = 1
-    # SMALL = 2
-    # MEDIUM = 3
+    TINY = 1
+    SMALL = 2
+    MEDIUM = 3
     LARGE = 4
 
     def __new__(cls, value):
