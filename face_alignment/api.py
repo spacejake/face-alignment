@@ -14,6 +14,7 @@ except BaseException:
 
 from .models import FAN, ResNetDepth
 from .utils import *
+from .util.gdrivedl import download, mkdir_safe
 
 
 class LandmarksType(Enum):
@@ -44,19 +45,37 @@ class NetworkSize(Enum):
         return self.value
 
 models_urls = {
-    '2DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/2DFAN4-11f355bf06.pth.tar',
-    '3DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/3DFAN4-7835d9f11d.pth.tar',
-    'depth': 'https://www.adrianbulat.com/downloads/python-fan/depth-2a464da4ea.pth.tar',
+    '2DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
+    '3DFAN-2': '16WZC28wWI7viWlmMILcGKzcyHBoBv2CI',
+    'depth': '1jK8zsNsTRKtkeM3OhEvFZZNlWiKywAcL',
 }
 
-models_chkpts = {
-    '3DFAN-4': '../ckpnt-fan256-v1/checkpointFAN.pth.tar',
-    'depth': '../ckpnt-laplacian-v1.2/checkpointDepth.pth.tar',
-}
+#models_chkpts = {
+#    '3DFAN-2': '../ckpnt-fan256-small/checkpointFAN.pth.tar',
+#    #'depth': '../ckpnt-laplacian-v1.2/checkpointDepth.pth.tar',
+#    'depth': '../ckpnt-3DFAN-align/checkpointDepth.pth.tar',
+#}
+
+ckpnt_dir = "checkpoints"
+
+def load_checkpoint(network_name):
+    print("Loding Network Model {}...".format(network_name))
+
+    ckpnt_fn = "{}.pth.tar".format(network_name)
+    ckpnt_filepath = os.path.join(ckpnt_dir, ckpnt_fn)
+
+    if not os.path.exists(ckpnt_filepath):
+        print("Downloading...")
+        mkdir_safe(ckpnt_dir)
+
+        download(models_urls[network_name], ckpnt_filepath)
+
+    checkpoint = torch.load(ckpnt_filepath)
+    return checkpoint
 
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
-                 device='cuda', flip_input=False, face_detector='sfd', verbose=False, remote=True):
+                 device='cuda', flip_input=False, face_detector='sfd', verbose=False):
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
@@ -68,6 +87,7 @@ class FaceAlignment:
             torch.backends.cudnn.benchmark = True
 
         # Get the face detector
+        print("Get Face Detector...")
         face_detector_module = __import__('face_alignment.detection.' + face_detector,
                                           globals(), locals(), [face_detector], 0)
         self.face_detector = face_detector_module.FaceDetector(device=device, verbose=verbose)
@@ -79,15 +99,12 @@ class FaceAlignment:
             network_name = '2DFAN-' + str(network_size)
         else:
             network_name = '3DFAN-' + str(network_size)
-
-        if remote:
-            fan_weights = load_url(models_urls[network_name], map_location=lambda storage, loc: storage)
-        else:
-            fan_checkpoint = torch.load(models_chkpts[network_name])
-            # fan_weights = fan_checkpoint['state_dict']
-            fan_weights = {
-                    k.replace('module.', ''): v for k,
-                    v in fan_checkpoint['state_dict'].items()}
+        
+        fan_checkpoint = load_checkpoint(network_name)
+        #fan_weights = fan_checkpoint['state_dict']
+        fan_weights = {
+                k.replace('module.', ''): v for k,
+                v in fan_checkpoint['state_dict'].items()}
 
         self.face_alignment_net.load_state_dict(fan_weights)
 
@@ -97,13 +114,7 @@ class FaceAlignment:
         # Initialiase the depth prediciton network
         if landmarks_type == LandmarksType._3D:
             self.depth_prediciton_net = ResNetDepth()
-
-
-            if remote:
-                depth_weights = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
-            else:
-                depth_weights = torch.load(models_chkpts['depth'])
-
+            depth_weights = load_checkpoint('depth')
             depth_dict = {
                 k.replace('module.', ''): v for k,
                 v in depth_weights['state_dict'].items()}

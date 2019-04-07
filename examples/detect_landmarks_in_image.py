@@ -20,7 +20,7 @@ import tkinter
 from skimage import io
 
 # Run the 3D face alignment on a test image, without CUDA.
-fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True, remote=False)
+fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True)
 
 input = io.imread('../test/assets/aflw-test.jpg')
 preds = fa.get_landmarks(input)[-1]
