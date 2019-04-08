@@ -19,7 +19,7 @@ message ImageData {
     bytes buffer = 2;
 }
 
-message BoundingBox {
+message BBox {
     int32 left = 1;
     int32 top = 2;
     int32 right = 3;
@@ -29,7 +29,7 @@ message BoundingBox {
 message LmkReq {
     ImageHeader hdr = 1;
     ImageData data = 2;
-    BoundingBox bbox = 3;
+    BBox bbox = 3;
 }
 
 message LmkRsp {
