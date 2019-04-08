@@ -23,11 +23,11 @@ class FANDetector:
         self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.SMALL, device='cuda:0', flip_input=True)
         
 
-    def detect(self, image):
+    def detect(self, image, detected_faces=None):
         #landmarks must be float32, as client expects
 
         start = time.time()
-        pred = self.fa.get_landmarks(image)[-1].astype(np.float32)
+        pred = self.fa.get_landmarks(image, detected_faces)[-1].astype(np.float32)
         end = time.time()
 
         print("Time to process image {}".format(end-start))
@@ -41,9 +41,9 @@ class DetectorSession(socketserver.BaseRequestHandler):
         socketserver.BaseRequestHandler.__init__(self, request, client_address, server)
         return
 
-    def detect(self, image):
+    def detect(self, image, detected_faces=None):
         if self.detector is not None:
-            return self.detector.detect(image)
+            return self.detector.detect(image, detected_faces)
         else:
             # send Fake data
             lmk = np.array([[1, 2, 0.3], [4, 5, 0.1],
@@ -75,9 +75,15 @@ class DetectorSession(socketserver.BaseRequestHandler):
             img = np.frombuffer(message_image, dtype=np.uint8)
             img = np.reshape(img, imgShape)
 
+            d = lmkreq.bbox
+            detected_faces=None
+            if d is not None:
+                detected_faces = [[d.left, d.top, d.right, d.bottom]]
+
+            print("Face BBOX: {}".format(detected_faces))
             #toimage(img).show()
 
-            landmarks = self.detect(img)
+            landmarks = self.detect(img, detected_faces)
 
             lmkrsp = messages_pb2.LmkRsp()
             lmkrsp.hdr.id = id
