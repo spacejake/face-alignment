@@ -80,7 +80,7 @@ class DetectorSession(socketserver.BaseRequestHandler):
             if d is not None:
                 detected_faces = [[d.left, d.top, d.right, d.bottom]]
 
-            print("Face BBOX: {}".format(detected_faces))
+            # print("Face BBOX: {}".format(detected_faces))
             #toimage(img).show()
 
             landmarks = self.detect(img, detected_faces)
