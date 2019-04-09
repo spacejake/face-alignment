@@ -45,7 +45,7 @@ class NetworkSize(Enum):
         return self.value
 
 models_urls = {
-    '2DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
+    '3DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
     '3DFAN-2': '16WZC28wWI7viWlmMILcGKzcyHBoBv2CI',
     'depth': '1jK8zsNsTRKtkeM3OhEvFZZNlWiKywAcL',
 }
