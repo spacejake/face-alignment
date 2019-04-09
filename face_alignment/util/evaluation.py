@@ -62,10 +62,10 @@ def calc_metrics(dists, path='', category='', method=''):
 
     auc = round(np.sum(axes2[:70]) / .7, 2)
 
-    nme = torch.mean(errors).numpy()
+    nme = torch.mean(errors).numpy() * 100
     if path:
         # label = '{} AUC: {}'.format(method, str(auc))
-        label = '{} NME: {}'.format(method, str(nme))
+        label = '{} NME: {:.2f}'.format(method, str(nme))
         plt.xlim(0, 7)
         plt.ylim(0, 100)
         plt.yticks(np.arange(0, 110, 10))
