@@ -65,7 +65,7 @@ def calc_metrics(dists, path='', category='', method=''):
     nme = torch.mean(errors).numpy() * 100
     if path:
         # label = '{} AUC: {}'.format(method, str(auc))
-        label = '{} NME: {:.2f}'.format(method, str(nme))
+        label = '{} NME: {:.2f}'.format(method, nme)
         plt.xlim(0, 7)
         plt.ylim(0, 100)
         plt.yticks(np.arange(0, 110, 10))
