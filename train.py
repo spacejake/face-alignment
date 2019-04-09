@@ -97,7 +97,7 @@ def main(args):
     print("=> Models will be saved at: {}".format(args.checkpoint))
 
     # Network Models
-    network_size = int(NetworkSize.LARGE)
+    network_size = int(args.nStacks)
     if train_fan:
         face_alignment_net = FAN(network_size)
     else:
