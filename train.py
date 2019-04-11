@@ -488,7 +488,21 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                         heatmaps[b, n], tpts[b, n], 2)
         heatmaps = heatmaps.to(device)
 
+        loss3D = torch.zeros([1], dtype=torch.float32)[0]
+        if val_depth:
+            depth_inp = torch.cat((input_var, heatmaps), 1)
+            pred_pts = model.Depth(depth_inp).detach()
+
+            # intermediate supervision
+            loss3D = criterion.pts(pred_pts, target_pts)
+
+            pts_img = pred_pts.cpu()
+        else:
+            pts_img = target.pts
+
+
         if val_idx % 50 == 0:
+            show_joints3D(pts_img[0])
             show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
             show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
@@ -498,19 +512,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
-        lossDepth = torch.zeros([1], dtype=torch.float32)[0]
-        if val_depth:
-            depth_inp = torch.cat((input_var, heatmaps), 1)
-            depth_pred = model.Depth(depth_inp).detach()
-
-            # intermediate supervision
-            lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
-
-            depth_pred = depth_pred.cpu()
-            pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
-        else:
-            pts_img = torch.cat((pts.data, target.pts[:,:,2].unsqueeze(2)), 2)
-
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
@@ -518,13 +519,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             predictions[meta['index'][n], :, :] = pts_img[n, :, :]
 
         losses.update(loss.data, inputs.size(0))
-        losseslmk.update(lossDepth.data, inputs.size(0))
+        losseslmk.update(loss3D.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         batch_time.update(time.time() - end)
         end = time.time()
 
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk:.4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Loss3D: {losslmk:.4f} | Acc: {acc: .4f}'.format(
             batch=val_idx + 1,
             size=len(loader),
             data=data_time.val,
