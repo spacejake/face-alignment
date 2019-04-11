@@ -204,6 +204,7 @@ class FAN(nn.Module):
 class ResNetDepth(nn.Module):
 
     def __init__(self, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
+        self.num_classes = num_classes
         self.inplanes = 64
         super(ResNetDepth, self).__init__()
         self.conv1 = nn.Conv2d(3 + 68, 64, kernel_size=7, stride=2, padding=3,
@@ -218,13 +219,10 @@ class ResNetDepth(nn.Module):
         self.bn2 = nn.BatchNorm2d(2048)
 
         final_hc = 512 * block.expansion
-        # self.avgpool = nn.AvgPool2d((2,7))
 
-        self.conv2 = nn.Conv2d(final_hc, final_hc, kernel_size=(4,7), stride=2, padding=(0,0),
+        self.conv2 = nn.Conv2d(final_hc, final_hc, kernel_size=(7,7), stride=2, padding=(0,0),
                                bias=False)
-        self.conv3 = nn.Conv2d(final_hc, num_classes, kernel_size=(3,1), stride=1, padding=(1,0),
-                               bias=False)
-        # self.fc = nn.Linear(final_hn, num_classes)
+        self.fc = nn.Linear(final_hc, num_classes*3)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -262,12 +260,11 @@ class ResNetDepth(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        # x = self.avgpool(x)
-        x = self.conv2(x) # make [b, c, 3, 1]
+        x = self.conv2(x) # make [b, c, 1, 1]
         x = self.bn2(x)
         x = self.relu(x)
-        x = self.conv3(x) # make [b, 68, 3, 1]
-        x = x.view(x.size(0), x.size(1), -1) # Squeeze 4D to [b, c, 3]
-        # x = self.fc(x)
+        x = x.view(x.size(0), -1)  # flatten
+        x = self.fc(x)
+        x = x.view(x.size(0), self.num_classes, 3) # Squeeze 4D to [b, classes, 3]
 
         return x
