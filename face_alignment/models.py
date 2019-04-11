@@ -215,8 +215,16 @@ class ResNetDepth(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.avgpool = nn.AvgPool2d(7)
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.bn2 = nn.BatchNorm2d(2048)
+
+        final_hc = 512 * block.expansion
+        # self.avgpool = nn.AvgPool2d((2,7))
+
+        self.conv2 = nn.Conv2d(final_hc, final_hc, kernel_size=(4,7), stride=2, padding=(0,0),
+                               bias=False)
+        self.conv3 = nn.Conv2d(final_hc, num_classes, kernel_size=(3,1), stride=1, padding=(1,0),
+                               bias=False)
+        # self.fc = nn.Linear(final_hn, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -254,8 +262,12 @@ class ResNetDepth(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        # x = self.avgpool(x)
+        x = self.conv2(x) # make [b, c, 3, 1]
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.conv3(x) # make [b, 68, 3, 1]
+        x = x.view(x.size(0), x.size(1), -1) # Squeeze 4D to [b, c, 3]
+        # x = self.fc(x)
 
         return x

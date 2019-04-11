@@ -301,7 +301,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     data_time = AverageMeter()
     losses = AverageMeter()
     lossesRegressor = AverageMeter()
-    lossesDepth = AverageMeter()
+    losses3D = AverageMeter()
     lossesLap = AverageMeter()
     acces = AverageMeter()
 
@@ -356,45 +356,44 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
-        lossDepth =  torch.zeros([1], dtype=torch.float32)[0]
+        loss3D =  torch.zeros([1], dtype=torch.float32)[0]
         lossLap =  torch.zeros([1], dtype=torch.float32)[0]
         if train_depth:
             target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
             depth_inp = torch.cat((input_var, target_hm256), 1)
-            depth_pred = model.Depth(depth_inp)
-            target_hm256 = target_hm256.cpu()
+            pred_pts = model.Depth(depth_inp)
+            # target_hm256 = target_hm256.cpu()
 
             # Supervision
             # Depth Loss
-            lossDepth = criterion.pts(depth_pred, target_pts[:, :, 2])
+            loss3D = criterion.pts(pred_pts, target_pts)
 
             # Laplacian Depth Loss
             # Computed for depth only, since both FAN and 3DRegressor are trained separably
             target_lap = torch.autograd.Variable(target.lap_pts.to(device))
-            tpts256 = target_pts[:, :, 0:2]
-            pred_pts256 = torch.cat((tpts256.to(device), depth_pred.unsqueeze(2)), 2)
-            pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts256)
-            lossLap = 1e-1 * criterion.laplacian(pred_lap, target_lap)
+            pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts)
+            lossLap = criterion.laplacian(pred_lap, target_lap)
 
-            lossRegressor = lossDepth + lossLap
+            lossRegressor = loss3D + 0.5 * lossLap
 
-            depth_pred = depth_pred.cpu()
+            pred_pts = pred_pts.cpu()
 
             # Back-prop
             optimizer.Depth.zero_grad()
-            lossDepth.backward()
+            lossRegressor.backward()
             optimizer.Depth.step()
 
-            pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
+            # pts_img = torch.cat((pts, pred_pts.unsqueeze(2)), 2)
+            pts_img = pred_pts
         else:
-            pts_img = torch.cat((pts, target.pts[:,:,2].unsqueeze(2)), 2)
+            pts_img = target.pts
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
-        #lossRegressor = lossDepth + lossLap
+        #lossRegressor = loss3D + lossLap
         lossesRegressor.update(lossRegressor.data, inputs.size(0))
-        lossesDepth.update(lossDepth.data, inputs.size(0))
+        losses3D.update(loss3D.data, inputs.size(0))
         lossesLap.update(lossLap.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
@@ -413,7 +412,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         end = time.time()
         bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
                      'Loss: {loss:.4f} | ' \
-                     'LossRegressor: {lossReg:.4f} | lossDepth: {lossDepth:.4f} | lossLaplacian: {lossLap:.4f} | ' \
+                     'LossRegressor: {lossReg:.4f} | loss3D: {loss3D:.4f} | lossLaplacian: {lossLap:.4f} | ' \
                      'Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
@@ -423,14 +422,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             eta=bar.eta_td,
             loss=losses.avg,
             lossReg=lossesRegressor.avg,
-            lossDepth=lossesDepth.avg,
+            loss3D=losses3D.avg,
             lossLap=lossesLap.avg,
             acc=acces.avg)
         bar.next()
 
     bar.finish()
 
-    return losses.avg, lossesRegressor.avg, lossesDepth.avg, lossesLap.avg, acces.avg
+    return losses.avg, lossesRegressor.avg, losses3D.avg, lossesLap.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
