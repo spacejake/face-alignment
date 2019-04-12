@@ -216,13 +216,12 @@ class ResNetDepth(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.bn2 = nn.BatchNorm2d(2048)
-
         final_hc = 512 * block.expansion
 
-        self.conv2 = nn.Conv2d(final_hc, final_hc, kernel_size=(7,7), stride=2, padding=(0,0),
+        self.conv2 = nn.Conv2d(final_hc, 512, kernel_size=(5,5), stride=1, padding=(0,0),
                                bias=False)
-        self.fc = nn.Linear(final_hc, num_classes*3)
+        self.bn2 = nn.BatchNorm2d(512)
+        self.fc = nn.Linear(512*4*4, num_classes*3)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
