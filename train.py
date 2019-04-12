@@ -189,7 +189,7 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Train Depth Loss', 'Train Laplacian Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     if args.resume_depth and train_depth:
         if os.path.isfile(args.resume_depth):
@@ -246,15 +246,15 @@ def main(args):
         lr = lr_fan if optimizer.FAN is not None else lr_depth
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
-        train_loss, train_lossreg, train_lossdepth, train_losslap, train_acc = \
+        train_loss, train_loss3D, train_acc = \
             train(train_loader, model, criterion, optimizer, args.netType, epoch, train_dataset.laplcian,
                   debug=args.debug, flip=args.flip, device=device)
 
         # do not save predictions in model file
-        valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
+        valid_loss, valid_loss3D, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, train_lossreg, train_lossdepth, train_losslap, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_loss3D, valid_loss, valid_loss3D, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
@@ -355,9 +355,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         pts = pts * 4 # 64->256
 
         # DEPTH
-        lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
-        loss3D =  torch.zeros([1], dtype=torch.float32)[0]
-        lossLap =  torch.zeros([1], dtype=torch.float32)[0]
+        loss3D = torch.zeros([1], dtype=torch.float32)[0]
         if train_depth:
             target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
             depth_inp = torch.cat((input_var, target_hm256), 1)
@@ -368,19 +366,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             # Depth Loss
             loss3D = criterion.pts(pred_pts, target_pts)
 
-            # Laplacian Depth Loss
-            # Computed for depth only, since both FAN and 3DRegressor are trained separably
-            target_lap = torch.autograd.Variable(target.lap_pts.to(device))
-            pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts)
-            lossLap = criterion.laplacian(pred_lap, target_lap)
-
-            lossRegressor = loss3D + 0.5 * lossLap
-
             pred_pts = pred_pts.cpu()
 
             # Back-prop
             optimizer.Depth.zero_grad()
-            lossRegressor.backward()
+            loss3D.backward()
             optimizer.Depth.step()
 
             # pts_img = torch.cat((pts, pred_pts.unsqueeze(2)), 2)
@@ -391,10 +381,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
-        #lossRegressor = loss3D + lossLap
-        lossesRegressor.update(lossRegressor.data, inputs.size(0))
         losses3D.update(loss3D.data, inputs.size(0))
-        lossesLap.update(lossLap.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
         if loader_idx % 50 == 0:
@@ -412,7 +399,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         end = time.time()
         bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
                      'Loss: {loss:.4f} | ' \
-                     'LossRegressor: {lossReg:.4f} | loss3D: {loss3D:.4f} | lossLaplacian: {lossLap:.4f} | ' \
+                     'loss3D: {loss3D:.4f} | ' \
                      'Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
@@ -421,15 +408,13 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
-            lossReg=lossesRegressor.avg,
             loss3D=losses3D.avg,
-            lossLap=lossesLap.avg,
             acc=acces.avg)
         bar.next()
 
     bar.finish()
 
-    return losses.avg, lossesRegressor.avg, losses3D.avg, lossesLap.avg, acces.avg
+    return losses.avg, losses3D.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
