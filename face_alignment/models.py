@@ -215,13 +215,18 @@ class ResNetDepth(nn.Module):
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layerXY = self._make_layer(block, 512, layers[3], stride=2)
+        self.layerZ = self._make_layer(block, 512, layers[3], stride=2)
         final_hc = 512 * block.expansion
 
-        self.conv2 = nn.Conv2d(final_hc, 512, kernel_size=(5,5), stride=1, padding=(0,0),
+        self.convXY = nn.Conv2d(final_hc, 512, kernel_size=(5,5), stride=1, padding=(0,0),
                                bias=False)
         self.bn2 = nn.BatchNorm2d(512)
-        self.fc = nn.Linear(512*4*4, num_classes*3)
+        self.fcXY = nn.Linear(512*4*4, num_classes*2)
+
+        self.convZ = nn.Conv2d(final_hc, 512, kernel_size=(5,5), stride=1, padding=(0,0),
+                               bias=False)
+        self.fcZ = nn.Linear(512*4*4, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -257,13 +262,24 @@ class ResNetDepth(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.layer4(x)
 
-        x = self.conv2(x) # make [b, c, 1, 1]
-        x = self.bn2(x)
-        x = self.relu(x)
-        x = x.view(x.size(0), -1)  # flatten
-        x = self.fc(x)
-        x = x.view(x.size(0), self.num_classes, 3) # Squeeze 4D to [b, classes, 3]
+        # Split xy- and z-coords
+        xy = self.layerXY(x)
+        z = self.layerZ(x)
 
+        xy = self.convXY(xy) # make [b, c, 4, 4]
+        xy = self.bn2(xy)
+        xy = self.relu(xy)
+        xy = xy.view(xy.size(0), -1)  # flatten
+        xy = self.fcXY(xy)
+        xy = xy.view(xy.size(0), self.num_classes, 2) # Squeeze 4D to [b, classes, ]
+
+        z = self.convZ(z) # make [b, c, 4, 4]
+        z = self.bn2(z)
+        z = self.relu(z)
+        z = z.view(z.size(0), -1)  # flatten
+        z = self.fcZ(z)
+
+	x = torch.cat((xy,z.unsqueeze(2), 2)
+        
         return x
