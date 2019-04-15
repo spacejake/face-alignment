@@ -374,7 +374,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts)
             lossLap = criterion.laplacian(pred_lap, target_lap)
 
-            lossRegressor = loss3D + 0.5 * lossLap
+            lossRegressor = loss3D + 0.1 * lossLap
 
             pred_pts = pred_pts.cpu()
 

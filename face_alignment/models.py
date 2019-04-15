@@ -215,7 +215,7 @@ class ResNetDepth(nn.Module):
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layerXY = self._make_layer(block, 512, layers[3], stride=2)
+        self.layerXY = self._make_layer(block, 512, layers[3], stride=2, split=True)
         self.layerZ = self._make_layer(block, 512, layers[3], stride=2)
         final_hc = 512 * block.expansion
 
@@ -236,7 +236,7 @@ class ResNetDepth(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, split=False):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -247,9 +247,11 @@ class ResNetDepth(nn.Module):
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
+        inplanes = planes * block.expansion
+        if split is False:
+            self.inplanes = inplanes
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(inplanes, planes))
 
         return nn.Sequential(*layers)
 
@@ -280,6 +282,6 @@ class ResNetDepth(nn.Module):
         z = z.view(z.size(0), -1)  # flatten
         z = self.fcZ(z)
 
-	x = torch.cat((xy,z.unsqueeze(2), 2)
+        x = torch.cat((xy,z.unsqueeze(2)), 2)
         
         return x
