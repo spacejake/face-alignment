@@ -99,17 +99,9 @@ def main(args):
 
     # Network Models
     network_size = int(args.nStacks)
-    if train_fan:
-        face_alignment_net = FAN(network_size)
-    else:
-        print("Training only Depth...")
-        face_alignment_net = None
+    face_alignment_net = FAN(network_size)
 
-    if train_depth:
-        depth_net = ResNetDepth()
-    else:
-        print("Training only FAN...")
-        depth_net = None
+    depth_net = ResNetDepth()
 
     if torch.cuda.device_count() > 1:
         deviceList = None
@@ -121,17 +113,11 @@ def main(args):
         #     nGpus = args.nGpu
 
         print("Using ", nGpus, "GPUs({})...".format(deviceList))
-        if train_fan:
-            face_alignment_net = torch.nn.DataParallel(face_alignment_net, device_ids=deviceList)
+        face_alignment_net = torch.nn.DataParallel(face_alignment_net, device_ids=deviceList)
+        depth_net = torch.nn.DataParallel(depth_net, device_ids=deviceList)
 
-        if train_depth:
-            depth_net = torch.nn.DataParallel(depth_net, device_ids=deviceList)
-
-    if train_fan:
-        face_alignment_net = face_alignment_net.to(device)
-
-    if train_depth:
-        depth_net = depth_net.to(device)
+    face_alignment_net = face_alignment_net.to(device)
+    depth_net = depth_net.to(device)
 
     model = Model(face_alignment_net, depth_net)
 
@@ -142,21 +128,9 @@ def main(args):
     criterion = Criterion(hm_crit, pnt_crit, lap_crit)
 
     # Optimization
-    if train_fan:
-        optimizerFan = torch.optim.RMSprop(
-            model.FAN.parameters(),
-            lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    else:
-        optimizerFan = None
-
-    if train_depth:
-        optimizerDepth = torch.optim.RMSprop(
-            model.Depth.parameters(),
-            lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    else:
-        optimizerDepth = None
-
-    optimizer = Optimizer(optimizerFan, optimizerDepth)
+    optimizer = torch.optim.Adam(
+        itertools.chain(model.FAN.parameters(), model.Depth.parameters()),
+        lr=args.lr, weight_decay=args.weight_decay)
 
     # Load Data
     title = args.checkpoint.split('/')[-1] + ' on ' + args.data.split('/')[-1]
@@ -169,7 +143,7 @@ def main(args):
         num_workers=args.workers,
         pin_memory=True)
 
-    if args.resume and train_fan:
+    if args.resume:
         if os.path.isfile(args.resume):
             print("=> Loading FAN checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
@@ -189,9 +163,9 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Train Depth Loss', 'Train Laplacian Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train FAN Loss', 'Train 3D Loss', 'Train Depth Loss', 'Train Laplacian Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
-    if args.resume_depth and train_depth:
+    if args.resume_depth:
         if os.path.isfile(args.resume_depth):
             print("=> Loading Depth checkpoint '{}'".format(args.resume_depth))
             checkpoint = torch.load(args.resume_depth)
@@ -210,10 +184,8 @@ def main(args):
         else:
             print("=> no Depth checkpoint found at '{}'".format(args.resume_depth))
 
-
     cudnn.benchmark = True
-    if train_fan:
-        print('=> Total params: %.2fM' % (sum(p.numel() for p in model.FAN.parameters()) / (1024. * 1024)))
+    print('=> Total params: %.2fM' % (sum(p.numel() for p in model.FAN.parameters()) / (1024. * 1024)))
 
     if args.evaluation:
         print('=> Evaluation only')
@@ -236,17 +208,13 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        if optimizer.FAN is not None:
-            lr_fan = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
-
-        if optimizer.Depth is not None:
-            lr_depth = adjust_learning_rate(optimizer.Depth, epoch, lr, args.schedule, args.gamma)
+        lr_new = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
 
         # New Learning rate
-        lr = lr_fan if optimizer.FAN is not None else lr_depth
+        lr = lr_new
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
-        train_loss, train_lossreg, train_lossdepth, train_losslap, train_acc = \
+        train_loss, train_lossfan, train_lossreg, train_lossdepth, train_losslap, train_acc = \
             train(train_loader, model, criterion, optimizer, args.netType, epoch, train_dataset.laplcian,
                   debug=args.debug, flip=args.flip, device=device)
 
@@ -254,39 +222,37 @@ def main(args):
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, train_lossreg, train_lossdepth, train_losslap, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_lossfan, train_lossreg, train_lossdepth, train_losslap, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
 
-        if train_fan:
-            save_checkpoint(
-                {
-                    'epoch': epoch + 1,
-                    'netType': args.netType,
-                    'state_dict': model.FAN.state_dict(),
-                    'best_acc': best_auc,
-                    'optimizer': optimizer.FAN.state_dict(),
-                },
-                is_best,
-                predictions,
-                checkpoint=args.checkpoint,
-                filename="checkpointFAN.pth.tar")
+        save_checkpoint(
+            {
+                'epoch': epoch + 1,
+                'netType': args.netType,
+                'state_dict': model.FAN.state_dict(),
+                'best_acc': best_auc,
+                'optimizer': optimizer.FAN.state_dict(),
+            },
+            is_best,
+            predictions,
+            checkpoint=args.checkpoint,
+            filename="checkpointFAN.pth.tar")
 
-        if train_depth:
-            save_checkpoint(
-                {
-                    'epoch': epoch + 1,
-                    'iter': 0,
-                    'netType': args.netType,
-                    'state_dict': model.Depth.state_dict(),
-                    'best_acc': best_auc,
-                    'optimizer': optimizer.Depth.state_dict(),
-                },
-                is_best,
-                None,
-                checkpoint=args.checkpoint,
-                filename="checkpointDepth.pth.tar")
+        save_checkpoint(
+            {
+                'epoch': epoch + 1,
+                'iter': 0,
+                'netType': args.netType,
+                'state_dict': model.Depth.state_dict(),
+                'best_acc': best_auc,
+                'optimizer': optimizer.Depth.state_dict(),
+            },
+            is_best,
+            None,
+            checkpoint=args.checkpoint,
+            filename="checkpointDepth.pth.tar")
         
         savefig(os.path.join(args.checkpoint, 'log_iter.eps'))
 
@@ -300,6 +266,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    lossesFAN = AverageMeter()
     lossesRegressor = AverageMeter()
     losses3D = AverageMeter()
     lossesLap = AverageMeter()
@@ -307,9 +274,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
     model.train()
     end = time.time()
-
-    train_fan = model.FAN is not None
-    train_depth = model.Depth is not None
 
     # rnn = torch.nn.LSTM(10, 20, 2)
     # hidden = torch.autograd.Variable(torch.zeros((args.train_batch)))
@@ -326,79 +290,67 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         target_pts = torch.autograd.Variable(target.pts.to(device))
 
         # FAN
-        loss = torch.zeros([1], dtype=torch.float32)[0]
-        if train_fan:
-            # Forward
-            output = model.FAN(input_var)
-            out_hm = output[-1]
+        lossFAN = torch.zeros([1], dtype=torch.float32)[0]
 
-            if flip:
-                flip_output = model.FAN(flip(out_hm[-1].clone()), is_label=True)
-                out_hm += flip(flip_output[-1])
+        # Forward
+        output = model.FAN(input_var)
+        out_hm = output[-1]
 
-            out_hm = out_hm.cpu()
+        if flip:
+            flip_output = model.FAN(flip(out_hm[-1].clone()), is_label=True)
+            out_hm += flip(flip_output[-1])
 
-            # Supervision
-            # Intermediate supervision
-            loss = 0
-            for out_inter in output:
-                loss += criterion.hm(out_inter, target_hm64)
+        out_hm = out_hm.cpu()
 
-            # Back-prop
-            optimizer.FAN.zero_grad()
-            loss.backward()
-            optimizer.FAN.step()
-        else:
-            out_hm = target.heatmap64
-        
-        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-        pts = pts * 4 # 64->256
+        # Supervision
+        # Intermediate supervision
+        lossFAN = 0
+        for out_inter in output:
+            lossFAN += criterion.hm(out_inter, target_hm64)
 
-        # DEPTH
-        lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
-        loss3D =  torch.zeros([1], dtype=torch.float32)[0]
-        lossLap =  torch.zeros([1], dtype=torch.float32)[0]
-        if train_depth:
-            target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
-            depth_inp = torch.cat((input_var, target_hm256), 1)
-            pred_pts = model.Depth(depth_inp)
-            # target_hm256 = target_hm256.cpu()
 
-            # Supervision
-            # Depth Loss
-            loss3D = criterion.pts(pred_pts, target_pts)
+        target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
+        depth_inp = torch.cat((input_var, target_hm256), 1)
+        pred_pts = model.Depth(depth_inp)
+        # target_hm256 = target_hm256.cpu()
 
-            # Laplacian Depth Loss
-            # Computed for depth only, since both FAN and 3DRegressor are trained separably
-            target_lap = torch.autograd.Variable(target.lap_pts.to(device))
-            pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts)
-            lossLap = criterion.laplacian(pred_lap, target_lap)
+        # Supervision
+        # Depth Loss
+        loss3D = criterion.pts(pred_pts, target_pts)
 
-            lossRegressor = loss3D + 0.1 * lossLap
+        # Laplacian Depth Loss
+        # Computed for depth only, since both FAN and 3DRegressor are trained separably
+        target_lap = torch.autograd.Variable(target.lap_pts.to(device))
+        pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts)
+        lossLap = criterion.laplacian(pred_lap, target_lap)
 
-            pred_pts = pred_pts.cpu()
+        lossRegressor = loss3D + 0.1 * lossLap
 
-            # Back-prop
-            optimizer.Depth.zero_grad()
-            lossRegressor.backward()
-            optimizer.Depth.step()
 
-            # pts_img = torch.cat((pts, pred_pts.unsqueeze(2)), 2)
-            pts_img = pred_pts
-        else:
-            pts_img = target.pts
+        # Final Loss
+        # Heat map error is very small compared with Regressor loss, we must even the influence
+        # Trained Heatmap generally trains to about 4e-3 error, while Regressor trains down to <10
+        LossTotal = 1e3 * lossFAN + lossRegressor
 
-        acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        # Back-prop
+        optimizer.zero_grad()
+        LossTotal.backward()
+        optimizer.step()
 
-        losses.update(loss.data, inputs.size(0))
-        #lossRegressor = loss3D + lossLap
-        lossesRegressor.update(lossRegressor.data, inputs.size(0))
-        losses3D.update(loss3D.data, inputs.size(0))
-        lossesLap.update(lossLap.data, inputs.size(0))
-        acces.update(acc[0], inputs.size(0))
+        pred_pts = pred_pts.cpu()
+        acc, _ = accuracy_points(pred_pts, target.pts, idx, thr=0.07)
+
+        batch_size = inputs.size(0)
+
+        losses.update(LossTotal.data, batch_size)
+        lossesFAN.update(lossFAN.data, batch_size)
+        lossesRegressor.update(lossRegressor.data, batch_size)
+        losses3D.update(loss3D.data, batch_size)
+        lossesLap.update(lossLap.data, batch_size)
+        acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
-            show_joints3D(pts_img.detach()[0])
+            show_joints3D(pred_pts.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
             show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
@@ -411,7 +363,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         batch_time.update(time.time() - end)
         end = time.time()
         bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
-                     'Loss: {loss:.4f} | ' \
+                     'Loss: {loss:.4f} | LossFAN: {lossfan:.4f} | ' \
                      'LossRegressor: {lossReg:.4f} | loss3D: {loss3D:.4f} | lossLaplacian: {lossLap:.4f} | ' \
                      'Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
@@ -421,6 +373,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
+            lossfan=lossesFAN.avg,
             lossReg=lossesRegressor.avg,
             loss3D=losses3D.avg,
             lossLap=lossesLap.avg,
@@ -429,7 +382,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
     bar.finish()
 
-    return losses.avg, lossesRegressor.avg, losses3D.avg, lossesLap.avg, acces.avg
+    return losses.avg, lossesFAN.avg, lossesRegressor.avg, losses3D.avg, lossesLap.avg, acces.avg
 
 
 def validate(loader, model, criterion, netType, debug, flip, device):
@@ -445,9 +398,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
     model.eval()
 
-    val_fan = model.FAN is not None
-    val_depth = model.Depth is not None
-
     gt_win, pred_win = None, None
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
@@ -459,64 +409,43 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         target_var = target.heatmap64.to(device)
         target_pts = target.pts.to(device)
 
-        loss = torch.zeros([1], dtype=torch.float32)[0]
-        if val_fan:
-            output = model.FAN(input_var)
-            out_hm = output[-1]
+        output = model.FAN(input_var)
+        out_hm = output[-1]
 
-            if flip:
-                flip_output = model.FAN(flip(out_hm[-1].detach()), is_label=True)
-                out_hm += flip(flip_output[-1])
+        if flip:
+            flip_output = model.FAN(flip(out_hm[-1].detach()), is_label=True)
+            out_hm += flip(flip_output[-1])
 
-            out_hm = out_hm.cpu()
+        out_hm = out_hm.cpu()
 
-            for o in output:
-                loss += criterion.hm(o, target_var)
-        else:
-            out_hm = target.heatmap64
+        loss = 0
+        for o in output:
+            loss += criterion.hm(o, target_var)
 
-        pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
-        pts = pts * 4 # 64->256
+        depth_inp = torch.cat((input_var, heatmaps), 1)
+        pred_pts = model.Depth(depth_inp).detach()
 
-        # if self.landmarks_type == LandmarksType._3D:
-        heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-        tpts = pts.clone()
-        for b in range(pts.size(0)):
-            for n in range(68):
-                if tpts[b, n, 0] > 0:
-                    heatmaps[b, n] = draw_gaussian(
-                        heatmaps[b, n], tpts[b, n], 2)
-        heatmaps = heatmaps.to(device)
+        # intermediate supervision
+        loss3D = criterion.pts(pred_pts, target_pts)
 
-        loss3D = torch.zeros([1], dtype=torch.float32)[0]
-        if val_depth:
-            depth_inp = torch.cat((input_var, heatmaps), 1)
-            pred_pts = model.Depth(depth_inp).detach()
-
-            # intermediate supervision
-            loss3D = criterion.pts(pred_pts, target_pts)
-
-            pts_img = pred_pts.cpu()
-        else:
-            pts_img = target.pts
+        pred_pts = pred_pts.cpu()
 
 
         if val_idx % 50 == 0:
-            show_joints3D(pts_img[0])
+            show_joints3D(pred_pts[0])
             show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
-            show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
             sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
             io.imsave("val_input-with-hm64.png",sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("val_input-with-gt-hm64.png",sample_hm)
 
-        acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        acc, batch_dists = accuracy_points(pred_pts, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
         for n in range(inputs.size(0)):
-            predictions[meta['index'][n], :, :] = pts_img[n, :, :]
+            predictions[meta['index'][n], :, :] = pred_pts[n, :, :]
 
         losses.update(loss.data, inputs.size(0))
         losseslmk.update(loss3D.data, inputs.size(0))
