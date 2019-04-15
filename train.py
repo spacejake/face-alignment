@@ -151,7 +151,7 @@ def main(args):
     model = Model(face_alignment_net, fan_D, depth_net)
     # Loss Functions
     crit_hm = torch.nn.MSELoss(reduction='mean').to(device)
-    crit_gan = torch.nn.MSELoss(reduction='mean').to(device)
+    crit_gan = torch.nn.BCEWithLogitsLoss(reduction='mean').to(device)
     crit_depth = torch.nn.MSELoss(reduction='mean').to(device)
     criterion = Criterion(crit_hm, crit_gan, crit_depth)
 
@@ -341,7 +341,7 @@ def main(args):
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
 
-def backwardG(fake, loss_id, model, opt, crit_gan, weight=1):
+def backwardG(fake, loss_hm, model, opt, crit_gan, weight_hm=1.0):
 
     # GAN Loss
     pred_fake = model(fake)
@@ -349,7 +349,7 @@ def backwardG(fake, loss_id, model, opt, crit_gan, weight=1):
     loss_G = crit_gan(pred_fake, true)
 
     # Combined Loss
-    loss_G_total = loss_G * weight + loss_id
+    loss_G_total = loss_G * weight_hm + loss_hm
 
     # backward
     opt.zero_grad()
@@ -444,10 +444,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
             in64 = in64.to(device)  # CUDA interpolate may be nondeterministic
             fake_in = torch.cat((in64, out_hm), 1)  # Concat input image with corresponding intermediate heatmaps
-            loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.hm, weight=1)
+            loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
+                                         weight_hm=1)
 
-            real_in = torch.cat((in64, target_hm64),
-                                1)  # Concat input image with corresponding intermediate heatmaps
+            # Concat input image with corresponding intermediate heatmaps
+            real_in = torch.cat((in64, target_hm64), 1)
             loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm,
                                                          criterion.d_hm)
         else:
