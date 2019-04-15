@@ -1,5 +1,5 @@
 # Based on https://github.com/pytorch/pytorch/blob/master/Dockerfile
-FROM nvidia/cuda:9.2-cudnn7-devel-ubuntu16.04 
+FROM nvidia/cuda:9.0-cudnn7-devel-ubuntu16.04 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
          build-essential \
@@ -23,7 +23,7 @@ ENV PATH /opt/conda/bin:$PATH
 
 RUN conda config --set always_yes yes --set changeps1 no && conda update -q conda 
 RUN conda install pytorch torchvision cudatoolkit=9.0 magma-cuda90 -c pytorch
-RUN conda install progress
+RUN conda install progress protobuf=3.6.1 tqdm 
 
 # Install face-alignment package
 WORKDIR /workspace

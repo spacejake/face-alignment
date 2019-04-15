@@ -79,25 +79,31 @@ def getTransform(center, scale, resolution, rotate=0):
         inverse transformation matrix (default: {False})
     """
     h = 200.0 * scale
-    t = torch.eye(3)
+    t = torch.eye(4)
+
+    # scale
     t[0, 0] = resolution / h
     t[1, 1] = resolution / h
-    t[0, 2] = resolution * (-center[0] / h + 0.5)
-    t[1, 2] = resolution * (-center[1] / h + 0.5)
+    t[2, 2] = resolution / h
 
+    # transform
+    t[0, 3] = resolution * (-center[0] / h + 0.5)
+    t[1, 3] = resolution * (-center[1] / h + 0.5)
+
+    # rotation
     if not rotate == 0:
         rotate = -rotate  # To match direction of rotation from cropping
-        rot_mat = torch.eye(3)
+        rot_mat = torch.eye(4)
         rot_rad = rotate * np.pi / 180
         sn, cs = torch.sin(rot_rad), torch.cos(rot_rad)
         rot_mat[:2, :2] = torch.tensor([[cs, -sn],
                                         [sn, cs]])
 
         # Need to rotate around center
-        t_mat = torch.eye(3)
-        t_mat[:2, 2] = -resolution / 2
+        t_mat = torch.eye(4)
+        t_mat[:2, 3] = -resolution / 2
         t_inv = t_mat.clone()
-        t_inv[:2, 2] *= -1
+        t_inv[:2, 3] *= -1
         t = torch.matmul(t_inv, torch.matmul(rot_mat, torch.matmul(t_mat, t)))
 
     return t
@@ -119,21 +125,22 @@ def transform(point, transform, invert=False):
         invert {bool} -- define wherever the function should produce the direct or the
         inverse transformation matrix (default: {False})
     """
-    _pt = torch.ones(3)
-    _pt[0] = point[0] - 1
-    _pt[1] = point[1] - 1
+    dim = len(point)
+    _pt = torch.ones(4)
+    for idx in range(0,dim):
+        _pt[idx] = point[idx]
 
     if invert:
         transform = torch.inverse(transform)
 
     new_point = (torch.matmul(transform, _pt))
 
-    if len(point) == 3:
-        new_point[2] = point[2]
-    else:
-        new_point = new_point[0:2]
+    #Hnormalize
+    new_point = torch.div(new_point[0:dim], new_point[-1])
 
-    return new_point.int() + 1
+    new_point[0:2] = new_point[0:2].int() + 1
+
+    return new_point
 
 # def transform(point, center, scale, resolution, invert=False):
 #     """apply affine transformation matrix to point.
@@ -256,6 +263,8 @@ def get_preds_fromhm(hm, center=None, scale=None):
         center {torch.tensor} -- the center of the bounding box (default: {None})
         scale {float} -- face scale (default: {None})
     """
+    width = (hm.size(2) - 1)
+    height = (hm.size(3) - 1)
     max, idx = torch.max(
         hm.view(hm.size(0), hm.size(1), hm.size(2) * hm.size(3)), 2)
     idx += 1
@@ -267,13 +276,15 @@ def get_preds_fromhm(hm, center=None, scale=None):
         for j in range(preds.size(1)):
             hm_ = hm[i, j, :]
             pX, pY = int(preds[i, j, 0]) - 1, int(preds[i, j, 1]) - 1
-            if pX > 0 and pX < 63 and pY > 0 and pY < 63:
+            if pX > 0 and pX < width and pY > 0 and pY < height:
                 diff = torch.FloatTensor(
                     [hm_[pY, pX + 1] - hm_[pY, pX - 1],
                      hm_[pY + 1, pX] - hm_[pY - 1, pX]])
                 preds[i, j].add_(diff.sign_().mul_(.25))
 
-    preds.add_(-.5)
+    # Why?? this line distorts conversion to and from GT points in tests???
+    # if hm.size(3) == 64:
+    #    preds.add_(-.5)
 
     preds_orig = torch.zeros(preds.size())
     if center is not None and scale is not None:
@@ -307,8 +318,8 @@ def shuffle_lr(parts, pairs=None, width=None):
     if parts.ndimension() == 2 or parts.ndimension() == 3:
         parts = parts[pairs, ...]
         if width is not None:
-            # flip horizontal on landmarks
-            parts[:, 0] = width - parts[:, 0]
+            # flip horizontal on landmarks, make width starting at 0
+            parts[:, 0] = (width-1) - parts[:, 0]
     else:
         parts = parts[:, pairs, ...]
 

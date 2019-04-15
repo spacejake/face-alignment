@@ -53,17 +53,19 @@ def dist_acc(dists, thr=0.5):
         return -1
 
 
-def calc_metrics(dists, path='', category=''):
+def calc_metrics(dists, path='', category='', method=''):
     errors = torch.mean(dists, 0).view(dists.size(1))
     axes1 = np.linspace(0, 1, 1000)
     axes2 = np.zeros(1000)
     for i in range(1000):
-        axes2[i] = (errors < axes1[i]).sum() / float(errors.size(0))
+        axes2[i] = (errors < axes1[i]).sum().numpy() / float(errors.size(0))
 
     auc = round(np.sum(axes2[:70]) / .7, 2)
 
+    nme = torch.mean(errors).numpy() * 100
     if path:
-        label = '({}) : {}'.format(category, str(auc))
+        # label = '{} AUC: {}'.format(method, str(auc))
+        label = '{} NME: {:.2f}'.format(method, nme)
         plt.xlim(0, 7)
         plt.ylim(0, 100)
         plt.yticks(np.arange(0, 110, 10))
@@ -73,7 +75,7 @@ def calc_metrics(dists, path='', category=''):
         plt.title('NME (%)', fontsize=20)
         plt.xlabel('NME (%)', fontsize=16)
         plt.ylabel('Test images (%)', fontsize=16)
-        if category:
+        if category in ['Easy', 'Media', 'Hard', 'Category A', 'Category B', 'Category C']:
             if category in ['Easy', 'Category A']:
                 plt.plot(axes1 * 100, axes2 * 100, 'b-', label=label, lw=3)
             if category in ['Media', 'Category B']:
