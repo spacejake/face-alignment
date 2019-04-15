@@ -143,11 +143,12 @@ def main(args):
         num_workers=args.workers,
         pin_memory=True)
 
+    opt_loaded = False
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> Loading FAN checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
+            # args.start_epoch = checkpoint['epoch']
             best_acc = checkpoint['best_acc']
 
             # model.FAN.load_state_dict(checkpoint['state_dict'])
@@ -156,7 +157,8 @@ def main(args):
                 v in checkpoint['state_dict'].items()}
             model.FAN.load_state_dict(fan_weights)
 
-            optimizer.FAN.load_state_dict(checkpoint['optimizer'])
+            # optimizer.load_state_dict(checkpoint['optimizer'])
+            opt_loaded = True
             print("=> Loaded FAN checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
             logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
         else:
@@ -178,7 +180,8 @@ def main(args):
                 v in checkpoint['state_dict'].items()}
             model.Depth.load_state_dict(depth_weights)
 
-            optimizer.Depth.load_state_dict(checkpoint['optimizer'])
+            if not opt_loaded:
+                optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> Loaded Depth checkpoint '{}' (epoch {})".format(args.resume_depth, checkpoint['epoch']))
             # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
         else:
@@ -208,7 +211,7 @@ def main(args):
     lr = args.lr
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr_new = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
+        lr_new = adjust_learning_rate(optimizer, epoch, lr, args.schedule, args.gamma)
 
         # New Learning rate
         lr = lr_new
@@ -233,7 +236,7 @@ def main(args):
                 'netType': args.netType,
                 'state_dict': model.FAN.state_dict(),
                 'best_acc': best_auc,
-                'optimizer': optimizer.FAN.state_dict(),
+                'optimizer': optimizer.state_dict(),
             },
             is_best,
             predictions,
@@ -247,7 +250,7 @@ def main(args):
                 'netType': args.netType,
                 'state_dict': model.Depth.state_dict(),
                 'best_acc': best_auc,
-                'optimizer': optimizer.Depth.state_dict(),
+                'optimizer': optimizer.state_dict(),
             },
             is_best,
             None,
@@ -301,18 +304,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         # Supervision
         # Intermediate supervision
         lossFAN = 0
-        for o in output:
-            lossFAN += criterion.hm(o, target_hm64)
-
-        # Final Loss
-        lossFAN += criterion.hm(out_hm, target_hm256)
-
-        # Supervision
-        # Intermediate supervision
-        lossFAN = 0
         for out_inter in output:
             lossFAN += criterion.hm(out_inter, target_hm64)
 
+        # Final Loss
+        lossFAN += criterion.hm(out_hm, target_hm256)
 
         #### 3D Regressor
         # Forward
@@ -332,8 +328,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         # Final Loss
         # Heat map error is very small compared with Regressor loss, we must even the influence
-        # Trained Heatmap generally trains to about 4e-3 error, while Regressor trains down to <10
-        LossTotal = lossFAN + 1e-3 *lossRegressor
+        # Trained Heatmap generally trains to about 4e-4 error, while Regressor trains down to <10
+        LossTotal = lossFAN + 1e-4 * lossRegressor
 
         # Back-prop
         optimizer.zero_grad()
@@ -353,15 +349,15 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
-            show_joints3D(pred_pts.detach()[0])
-            # show_joints3D(target.pts[0])
-            # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm256.png")
-            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="hm256_gt.png")
+            show_joints3D(pred_pts.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
+            show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
+
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
-            io.imsave("input-with-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave("input-with-gt-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"input-with-gt-hm64.png"),sample_hm)
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -435,15 +431,16 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         pred_pts = pred_pts.cpu()
 
         if val_idx % 50 == 0:
-            show_joints3D(pred_pts[0], outfn="val_3dPoints.png")
-            show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
-            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
-            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
+            show_joints3D(pred_pts.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
+            show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
+            show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
+            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
-            io.imsave("val_input-with-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave("val_input-with-gt-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
         acc, batch_dists = accuracy_points(pred_pts, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
