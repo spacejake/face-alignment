@@ -141,6 +141,16 @@ class HourGlass(nn.Module):
     def forward(self, x):
         return self._forward(self.depth, x)
 
+class Interpolate(nn.Module):
+    def __init__(self, size, mode):
+        super(Interpolate, self).__init__()
+        self.interp = nn.functional.interpolate
+        self.size = size
+        self.mode = mode
+
+    def forward(self, x):
+        x = self.interp(x, size=self.size, mode=self.mode)
+        return x
 
 class FAN(nn.Module):
 
@@ -165,14 +175,46 @@ class FAN(nn.Module):
             self.add_module('l' + str(hg_module), nn.Conv2d(256,
                                                             68, kernel_size=1, stride=1, padding=0))
 
-            if hg_module < self.num_modules - 1:
-                self.add_module(
-                    'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
-                self.add_module('al' + str(hg_module), nn.Conv2d(68,
-                                                                 256, kernel_size=1, stride=1, padding=0))
+            # if hg_module < self.num_modules - 1:
+            self.add_module(
+                'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
+            self.add_module('al' + str(hg_module), nn.Conv2d(68,
+                                                             256, kernel_size=1, stride=1, padding=0))
+        input_skip_seq = [
+            conv3x3(3, 128),
+            nn.BatchNorm2d(128),
+        ]
+        self.input_skip = nn.Sequential(*input_skip_seq)
 
-    def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)), True)
+        downsample_seq = [
+            conv3x3(256, 256),
+            nn.BatchNorm2d(256),
+        ]
+        self.downsample_layer = nn.Sequential(*downsample_seq)
+
+        # output
+        up_sequence = [
+            ConvBlock(256, 256),
+            Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
+            conv3x3(256, 128),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
+        ]
+        self.up_layer = nn.Sequential(*up_sequence)
+
+        output_sequence = [
+            conv3x3(128, 128),
+            nn.BatchNorm2d(128),
+            conv3x3(128, 128),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 68, kernel_size=1, stride=1, padding=0)
+        ]
+        self.output_layer = nn.Sequential(*output_sequence)
+
+    def forward(self, input):
+        x = F.relu(self.bn1(self.conv1(input)), True)
         x = F.avg_pool2d(self.conv2(x), 2, stride=2)
         x = self.conv3(x)
         x = self.conv4(x)
@@ -193,13 +235,19 @@ class FAN(nn.Module):
             tmp_out = self._modules['l' + str(i)](ll)
             outputs.append(tmp_out)
 
+            ll = self._modules['bl' + str(i)](ll)
+            tmp_out_ = self._modules['al' + str(i)](tmp_out)
+
             if i < self.num_modules - 1:
-                ll = self._modules['bl' + str(i)](ll)
-                tmp_out_ = self._modules['al' + str(i)](tmp_out)
                 previous = previous + ll + tmp_out_
 
-        return outputs
+        # x = self.downsample_layer(x)
+        out = self.downsample_layer(x) + ll + tmp_out_
+        out = self.up_layer(out)
+        out = self.input_skip(input) + out
+        out = self.output_layer(out)
 
+        return out, outputs
 
 class ResNetDepth(nn.Module):
 

@@ -99,7 +99,7 @@ def main(args):
 
     # Network Models
     network_size = int(args.nStacks)
-    face_alignment_net = FAN(network_size)
+    face_alignment_net = FAN(num_modules=network_size)
 
     depth_net = ResNetDepth()
 
@@ -287,20 +287,25 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
+        target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
         target_pts = torch.autograd.Variable(target.pts.to(device))
 
-        # FAN
-        lossFAN = torch.zeros([1], dtype=torch.float32)[0]
-
+        #### FAN
         # Forward
-        output = model.FAN(input_var)
-        out_hm = output[-1]
+        out_hm, output = model.FAN(input_var)
 
         if flip:
-            flip_output = model.FAN(flip(out_hm[-1].clone()), is_label=True)
-            out_hm += flip(flip_output[-1])
+            flip_out_hm, _ = model.FAN(flip(input_var), is_label=True)
+            out_hm += flip(flip_out_hm)
 
-        out_hm = out_hm.cpu()
+        # Supervision
+        # Intermediate supervision
+        lossFAN = 0
+        for o in output:
+            lossFAN += criterion.hm(o, target_hm64)
+
+        # Final Loss
+        lossFAN += criterion.hm(out_hm, target_hm256)
 
         # Supervision
         # Intermediate supervision
@@ -309,13 +314,12 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             lossFAN += criterion.hm(out_inter, target_hm64)
 
 
-        target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
-        depth_inp = torch.cat((input_var, target_hm256), 1)
+        #### 3D Regressor
+        # Forward
+        depth_inp = torch.cat((input_var, out_hm), 1)
         pred_pts = model.Depth(depth_inp)
-        # target_hm256 = target_hm256.cpu()
 
         # Supervision
-        # Depth Loss
         loss3D = criterion.pts(pred_pts, target_pts)
 
         # Laplacian Depth Loss
@@ -326,11 +330,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         lossRegressor = loss3D + 0.1 * lossLap
 
-
         # Final Loss
         # Heat map error is very small compared with Regressor loss, we must even the influence
         # Trained Heatmap generally trains to about 4e-3 error, while Regressor trains down to <10
-        LossTotal = 1e3 * lossFAN + lossRegressor
+        LossTotal = lossFAN + 1e-3 *lossRegressor
 
         # Back-prop
         optimizer.zero_grad()
@@ -353,9 +356,9 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             show_joints3D(pred_pts.detach()[0])
             # show_joints3D(target.pts[0])
             # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
-            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm256.png")
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="hm256_gt.png")
+            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("input-with-hm64.png",sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("input-with-gt-hm64.png",sample_hm)
@@ -407,22 +410,23 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_var = target.heatmap64.to(device)
+        target_var256 = target.heatmap256.to(device)
         target_pts = target.pts.to(device)
 
-        output = model.FAN(input_var)
-        out_hm = output[-1]
+        #### FAN
+        out_hm, output = model.FAN(input_var)
 
         if flip:
-            flip_output = model.FAN(flip(out_hm[-1].detach()), is_label=True)
-            out_hm += flip(flip_output[-1])
+            flip_out_hm, _ = model.FAN(flip(input_var))
+            out_hm += flip(flip_out_hm.detach(), is_label=True)
 
-        out_hm = out_hm.cpu()
-
-        loss = 0
+        lossFAN = 0
         for o in output:
-            loss += criterion.hm(o, target_var)
+            lossFAN += criterion.hm(o, target_var)
 
-        depth_inp = torch.cat((input_var, heatmaps), 1)
+        lossFAN += criterion.hm(out_hm, target_var256)
+
+        depth_inp = torch.cat((input_var, out_hm), 1)
         pred_pts = model.Depth(depth_inp).detach()
 
         # intermediate supervision
@@ -430,13 +434,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
         pred_pts = pred_pts.cpu()
 
-
         if val_idx % 50 == 0:
-            show_joints3D(pred_pts[0])
-            show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
+            show_joints3D(pred_pts[0], outfn="val_3dPoints.png")
+            show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname="val_hm64.png")
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
+            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname="val_hm256.png")
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
-            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
             io.imsave("val_input-with-hm64.png",sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave("val_input-with-gt-hm64.png",sample_hm)
@@ -447,7 +451,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         for n in range(inputs.size(0)):
             predictions[meta['index'][n], :, :] = pred_pts[n, :, :]
 
-        losses.update(loss.data, inputs.size(0))
+        losses.update(lossFAN.data, inputs.size(0))
         losseslmk.update(loss3D.data, inputs.size(0))
         acces.update(acc[0], inputs.size(0))
 
@@ -465,23 +469,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
-        # print(' Val: ({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | Acc: {acc: .4f}'.format(
-        #     batch=val_idx + 1,
-        #     size=len(loader),
-        #     data=data_time.val,
-        #     bt=batch_time.val,
-        #     total=bar.elapsed_td,
-        #     eta=bar.eta_td,
-        #     loss=losses.avg,
-        #     acc=acces.avg))
-
-
-        # if (val_idx+1) % 5 == 0:
-        #     break
 
     bar.finish()
     mean_error = torch.mean(all_dists)
-    auc = calc_metrics(all_dists, path=args.checkpoint, category='300W-Testset', method='3D-FAN') # this is auc of predicted maps and target.
+    auc = calc_metrics(all_dists, path=args.checkpoint, category='300W-Testset', method='Ours') # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
     return losses.avg, losseslmk.avg, acces.avg, predictions, auc
 
