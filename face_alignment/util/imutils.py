@@ -129,7 +129,7 @@ def show_joints(img, pts):
     plt.axis('off')
     plt.show()
 
-def show_joints3D(pts):
+def show_joints3D(pts, outfn="3dPoints.png"):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
@@ -139,7 +139,7 @@ def show_joints3D(pts):
     ax.view_init(elev=90., azim=90., )
     ax.set_xlim(ax.get_xlim()[::-1])
     plt.show()
-    plt.savefig("3dPoints.png")
+    plt.savefig(outfn)
     plt.close()
 
 

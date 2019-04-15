@@ -462,7 +462,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
             depth_inp = torch.cat((input_var, target_hm256), 1)
             depth_pred = model.Depth(depth_inp)
-            target_hm256 = target_hm256.cpu()
 
             # Supervision
             # 3D LMk Loss
@@ -491,15 +490,16 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         acces.update(acc[0], inputs.size(0))
 
         if loader_idx % 50 == 0:
-            show_joints3D(pts_img.detach()[0])
-            # show_joints3D(target.pts[0])
-            # show_heatmap(target.heatmap256)
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname="hm64.png")
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="hm64_gt.png")
+            show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
+            show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
+
+            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint, "hm256.png"))
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint, "hm256_gt.png"))
+
             sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
-            io.imsave("input-with-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave("input-with-gt-hm64.png",sample_hm)
+            io.imsave(os.path.join(args.checkpoint,"input-with-gt-hm64.png"),sample_hm)
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -561,8 +561,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             out_hm = output[-1]
 
             if flip:
-                flip_output = model.FAN(flip(out_hm[-1].detach()), is_label=True)
-                out_hm += flip(flip_output[-1])
+                flip_output = model.FAN(flip(out_hm[-1].detach()))
+                out_hm += flip(flip_output[-1], is_label=True)
 
             out_hm = out_hm.cpu()
 
@@ -571,28 +571,20 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         else:
             out_hm = target.heatmap64
 
-        pts, pts_img = get_preds_fromhm(out_hm, target.center, target.scale)
+        pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
         pts = pts * 4 # 64->256
 
-        # if self.landmarks_type == LandmarksType._3D:
-        heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-        tpts = pts.clone()
-        for b in range(pts.size(0)):
-            for n in range(68):
-                if tpts[b, n, 0] > 0:
-                    heatmaps[b, n] = draw_gaussian(
-                        heatmaps[b, n], tpts[b, n], 2)
-        heatmaps = heatmaps.to(device)
-
-        if val_idx % 50 == 0:
-            show_heatmap(out_hm.data[0].unsqueeze(0), outname="val_hm64.png")
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname="val_hm64_gt.png")
-            show_heatmap(heatmaps.cpu().data[0].unsqueeze(0), outname="val_hm256.png")
-            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname="val_hm256_gt.png")
-            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
-            io.imsave("val_input-with-hm64.png",sample_hm)
-            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave("val_input-with-gt-hm64.png",sample_hm)
+        if val_fan:
+            heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
+            tpts = pts.clone()
+            for b in range(pts.size(0)):
+                for n in range(68):
+                    if tpts[b, n, 0] > 0:
+                        heatmaps[b, n] = draw_gaussian(
+                            heatmaps[b, n], tpts[b, n], 2)
+            heatmaps = heatmaps.to(device)
+        else:
+            heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
         if val_depth:
@@ -606,6 +598,20 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
         else:
             pts_img = torch.cat((pts.data, target.pts[:,:,2].unsqueeze(2)), 2)
+
+        if val_idx % 50 == 0:
+            show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
+            show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
+
+            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
+            show_heatmap(heatmaps.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
+            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
+
+            sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
+            io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
+            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+            io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
@@ -631,9 +637,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
-
-        # if val_idx % 5 == 0:
-        #     break
 
     bar.finish()
     mean_error = torch.mean(all_dists)
