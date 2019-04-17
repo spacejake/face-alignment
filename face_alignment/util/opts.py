@@ -24,7 +24,7 @@ def argparser():
     P.add_argument('--weight-decay', type=float, default=0.0, help='weight decay')
     P.add_argument('--netType', type=str, default='fan', help='options: fan')
     P.add_argument(
-        '--pointType', type=str, default='2D', choices=['2D', '3D'], help='2D or 3D face alignment')
+        '--pointType', type=str, default='3D', choices=['2D', '3D'], help='2D or 3D face alignment')
     P.add_argument('--nModules', type=int, default=1, help='number of modules per level')
     P.add_argument('--nStacks', type=int, default=4, help='number of stacked network(s)')
     P.add_argument('--use-se', action='store_true', help='use SE layer or not')
