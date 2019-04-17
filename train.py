@@ -110,7 +110,7 @@ def main(args):
     if train_fan:
         face_alignment_net = FAN(network_size)
         # fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
-        fan_D = ResDiscriminator(in_channels=71, ndf=8, ndlayers=1, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
+        fan_D = ResDiscriminator(in_channels=71, ndf=64, ndlayers=3, use_sigmoid=False)  # 3-ch image + 68-ch heatmap
         # fan_D = NLayerDiscriminator(input_nc=71, ndf=16, n_layers=1, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
     else:
         print("Training only Depth...")
@@ -341,15 +341,23 @@ def main(args):
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
 
-def backwardG(fake, loss_hm, model, opt, crit_gan, weight_hm=1.0):
+def backwardG(fake, real, loss_hm, model, opt, crit, weight_hm=1.0):
 
     # GAN Loss
+    pred_real = model(real)
     pred_fake = model(fake)
-    true = torch.ones(pred_fake.shape).cuda()
-    loss_G = crit_gan(pred_fake, true)
 
-    # Combined Loss
-    loss_G_total = loss_G * weight_hm + loss_hm
+    # Labels
+    true = torch.ones(pred_real.shape).cuda()
+    false = torch.zeros(pred_fake.shape).cuda()
+
+    # Relativistic average Standard GAN Generator Loss
+    loss_G_fake = crit(pred_real - torch.mean(pred_fake), false)
+    loss_G_real = crit(pred_fake - torch.mean(pred_real), true)
+
+    # Combined losses
+    loss_G = (loss_G_fake + loss_G_real) * 0.5
+    loss_G_total = loss_G + weight_hm * loss_hm
 
     # backward
     opt.zero_grad()
@@ -360,15 +368,20 @@ def backwardG(fake, loss_hm, model, opt, crit_gan, weight_hm=1.0):
 
 
 def backwardD(fake, real, model, opt, crit):
+
     # Train Real
     pred_real = model(real)
-    true = torch.ones(pred_real.shape).cuda()
-    loss_D_real = crit(pred_real, true)
 
     # Train Fake
     pred_fake = model(fake.detach())
+
+    # Labels
+    true = torch.ones(pred_real.shape).cuda()
     false = torch.zeros(pred_fake.shape).cuda()
-    loss_D_fake = crit(pred_fake, false)
+
+    # Relativistic average Standard GAN
+    loss_D_real = crit(pred_real - torch.mean(pred_fake), true)
+    loss_D_fake = crit(pred_fake - torch.mean(pred_real), false)
 
     # Combined loss
     loss_D = (loss_D_real + loss_D_fake) * 0.5
@@ -424,7 +437,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
                 flip_output = model.FAN(flip(out_hm[-1].clone()))
                 out_hm += flip(flip_output[-1], is_label=True)
 
-            out_hm = out_hm.cpu()
 
             # Supervision
             # Intermediate supervision
@@ -443,14 +455,17 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             # imshow(in64[0])
 
             in64 = in64.to(device)  # CUDA interpolate may be nondeterministic
-            fake_in = torch.cat((in64, out_hm), 1)  # Concat input image with corresponding intermediate heatmaps
-            loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
-                                         weight_hm=1)
 
             # Concat input image with corresponding intermediate heatmaps
+            fake_in = torch.cat((in64, out_hm), 1)
             real_in = torch.cat((in64, target_hm64), 1)
+            loss_gan, loss_g = backwardG(fake_in, real_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
+                                         weight_hm=1)
+
             loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm,
                                                          criterion.d_hm)
+
+            out_hm = out_hm.cpu()
         else:
             out_hm = target.heatmap64
         
@@ -565,10 +580,11 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                 flip_output = model.FAN(flip(out_hm[-1].detach()))
                 out_hm += flip(flip_output[-1], is_label=True)
 
-            out_hm = out_hm.cpu()
 
             for o in output:
                 loss += criterion.hm(o, target_var)
+
+            out_hm = out_hm.cpu()
         else:
             out_hm = target.heatmap64
 
