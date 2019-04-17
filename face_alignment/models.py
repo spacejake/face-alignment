@@ -355,8 +355,15 @@ class ResDiscriminator(nn.Module):
         super(ResDiscriminator, self).__init__()
         self.res_d = self.make_model(in_channels, ndf, ndlayers, use_sigmoid)
         self.fc_in_size = ndf*(2**ndlayers)
-        self.fc = nn.Sequential(nn.Linear(self.fc_in_size, 1), nn.Sigmoid())
-        # self.fc = nn.Sequential(nn.Linear(1024, 1), nn.Sigmoid())
+
+        out_seq = [nn.Linear(self.fc_in_size, 1)]
+
+        if use_sigmoid:
+            out_seq += [nn.Sigmoid()]
+
+        self.fc = nn.Sequential(*out_seq)
+
+        # self.fc = nn.Sequential(nn.Linear(self.fc_in_size, 1), nn.Sigmoid())
 
     def make_model(self, in_channels, ndf, ndlayers, use_sigmoid):
         model = []
@@ -376,6 +383,7 @@ class ResDiscriminator(nn.Module):
         out = self.res_d(input)
         out = F.avg_pool2d(out, out.size(3), stride=1)
         out = out.view(-1, self.fc_in_size)
+
         return self.fc(out)
 
 
