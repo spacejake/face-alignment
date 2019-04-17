@@ -156,12 +156,12 @@ def main(args):
     criterion = Criterion(crit_hm, crit_gan, crit_depth)
 
     # Optimization
-    lr_hm_d = args.lr #*0.1
+    lr_hm_d = args.lr*0.1
     if train_fan:
         print("Heatmap Discriminator initial lr: {}".format(lr_hm_d))
-        optimizerFan = torch.optim.Adam(
+        optimizerFan = torch.optim.RMSprop(
             model.FAN.parameters(),
-            lr=args.lr, weight_decay=args.weight_decay)
+            lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
         optimizerFanD = torch.optim.Adam(
             model.D_hm.parameters(),
