@@ -494,8 +494,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
 
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint, "hm256.png"))
-            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint, "hm256_gt.png"))
+            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint, "hm64.png"))
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint, "hm64_gt.png"))
 
             sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
             io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
