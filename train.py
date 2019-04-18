@@ -110,7 +110,7 @@ def main(args):
     if train_fan:
         face_alignment_net = FAN(network_size)
         # fan_D = ResPatchDiscriminator(in_channels=71, ndf=8, ndlayers=2, use_sigmoid=True) #3-ch image + 68-ch heatmap
-        fan_D = ResDiscriminator(in_channels=71, ndf=64, ndlayers=4, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
+        fan_D = ResDiscriminator(in_channels=71, ndf=96, ndlayers=4, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
         # fan_D = NLayerDiscriminator(input_nc=71, ndf=16, n_layers=1, use_sigmoid=True)  # 3-ch image + 68-ch heatmap
     else:
         print("Training only Depth...")
@@ -268,6 +268,14 @@ def main(args):
         pin_memory=True)
     lr = args.lr
 
+    #cgan_error_threshold_decrease = 0.001
+    #cgan_threashold_decrement = 0.01
+    #cgan_threashold_min = 0.03
+    cgan_threashold = 0.07
+
+    
+    print("Conditional GAN Initial threashold: {}".format(cgan_threashold))
+
     for epoch in range(args.start_epoch, args.epochs):
         if optimizer.FAN is not None:
             lr_fan = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
@@ -281,7 +289,7 @@ def main(args):
         print('=> Epoch: %d | LR_G %.8f | LR_D %.8f' % (epoch + 1, lr, lr_hm_d))
 
         train_loss, train_losslmk, loss_g, loss_d, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
-                                      debug=args.debug, flip=args.flip, device=device)
+                                      debug=args.debug, flip=args.flip, device=device, conf_gan_thr=cgan_threashold)
 
         # do not save predictions in model file
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
@@ -291,6 +299,12 @@ def main(args):
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
+
+        # Slowly increase the Descriminator's allowed threashold to increase the challenge of defeating the network
+        #if loss_g < cgan_error_threshold_decrease and cgan_threashold > cgan_threashold_min:
+        #    cgan_threashold -= cgan_threashold_decrement
+        #    print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, cgan_error_threshold_decrease, cgan_threashold))
+            
 
         if train_fan:
             save_checkpoint(
@@ -388,7 +402,7 @@ def backwardD(fake, real, model, opt, crit, thr=0.07):
     return loss_D, loss_D_real, loss_D_fake
 
 
-def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=False, flip=False, device='cuda:0'):
+def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=False, flip=False, device='cuda:0', conf_gan_thr=0.07):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -453,7 +467,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             # Concat input image with corresponding intermediate heatmaps
             real_in = torch.cat((in64, target_hm64), 1)
             loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm,
-                                                         criterion.d_hm)
+                                                         criterion.d_hm, thr=conf_gan_thr)
 
             out_hm = out_hm.cpu()
         else:
