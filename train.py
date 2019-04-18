@@ -268,9 +268,9 @@ def main(args):
         pin_memory=True)
     lr = args.lr
 
-    #cgan_error_threshold_decrease = 0.001
-    #cgan_threashold_decrement = 0.01
-    #cgan_threashold_min = 0.03
+    cgan_error_threshold_decrease = 0.001
+    cgan_threashold_decrement = 0.01
+    cgan_threashold_min = 0.03
     cgan_threashold = 0.07
 
     
@@ -301,9 +301,9 @@ def main(args):
         best_auc = max(valid_auc, best_auc)
 
         # Slowly increase the Descriminator's allowed threashold to increase the challenge of defeating the network
-        #if loss_g < cgan_error_threshold_decrease and cgan_threashold > cgan_threashold_min:
-        #    cgan_threashold -= cgan_threashold_decrement
-        #    print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, cgan_error_threshold_decrease, cgan_threashold))
+        if loss_g < cgan_error_threshold_decrease and cgan_threashold > cgan_threashold_min:
+            cgan_threashold -= cgan_threashold_decrement
+            print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, cgan_error_threshold_decrease, cgan_threashold))
             
 
         if train_fan:
