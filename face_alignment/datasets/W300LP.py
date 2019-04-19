@@ -31,6 +31,7 @@ def get_loader(data):
         # 'LS3D-W': LS3DW,
     }[dataset]
 
+
 class W300LP(data.Dataset):
 
     def __init__(self, args, split='train'):
@@ -51,6 +52,11 @@ class W300LP(data.Dataset):
         self.anno = self._getDataFaces(self.is_train)
         self.total = len(self.anno)
         self.mean, self.std = self._comput_mean()
+
+        # Load pre-computed laplacian matrix
+        laplacianData = sio.loadmat(
+            os.path.join(self.img_dir, 'laplacian.mat'))
+        self.laplcian = torch.from_numpy(laplacianData['L']).float()
 
     def _getDataFaces(self, is_train):
         base_dir = self.lmk_dir
@@ -76,8 +82,8 @@ class W300LP(data.Dataset):
         return self.total
 
     def __getitem__(self, index):
-        inp, heatmap64, heatmap256, pts, center, scale = self.generateSampleFace(index)
-        target = Target(heatmap64, heatmap256, pts, center, scale)
+        inp, heatmap64, heatmap256, pts, lap_pts, center, scale = self.generateSampleFace(index)
+        target = Target(heatmap64, heatmap256, pts, lap_pts, center, scale)
         if self.is_train:
             return inp, target
         else:
@@ -139,7 +145,10 @@ class W300LP(data.Dataset):
                 heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
-        return inp, heatmap64, heatmap256, pts, c, s
+        # Compute Target Laplacian vectors
+        lap_pts = compute_laplacian(self.laplcian, pts)
+
+        return inp, heatmap64, heatmap256, pts, lap_pts, c, s
 
     def _comput_mean(self):
         meanstd_file = os.path.join(self.img_dir, 'mean.pth.tar')
@@ -169,6 +178,11 @@ class W300LP(data.Dataset):
             print('\tMean: %.4f, %.4f, %.4f' % (ms['mean'][0], ms['mean'][1], ms['mean'][2]))
             print('\tStd:  %.4f, %.4f, %.4f' % (ms['std'][0], ms['std'][1], ms['std'][2]))
         return ms['mean'], ms['std']
+
+def compute_laplacian(laplacianMat, points):
+    lap_pts = torch.matmul(laplacianMat, points)
+
+    return lap_pts
 
 if __name__=="__main__":
     import face_alignment.util.opts as opts

@@ -13,7 +13,7 @@ import time
 
 # Run the 3D face alignment on a test image, without CUDA.
 #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
-fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda', flip_input=True)
+fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.SMALL, device='cuda', flip_input=True)
 
 #directory = '../test/assets/LandmarkTests'
 #directory = '../test/assets/smallTest'
