@@ -277,12 +277,12 @@ def main(args):
 
     # At epoch 10, changed to a quadratic function ax^2 + min_threashold
     agan_threashold_coeff = 5e-4
-    agan_threashold_max_iter = 10
+    agan_threashold_max_steps = 10
     agan_threashold_min = 0.02 # Change At epoch 10, 0.03->0.02, network should be capable of better
 
     # Initialize
-    agan_threashold_iter = agan_threashold_max_iter-3 # Stopped at epoch 10, set to 3
-    agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_iter, agan_threashold_min)
+    agan_threashold_step = agan_threashold_max_steps
+    agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_step, agan_threashold_min)
 
     print("Conditional GAN Initial threashold: {}".format(agan_threashold))
 
