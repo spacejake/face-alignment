@@ -555,8 +555,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         if loader_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
-
-
+            
+            show_heatmap(out_hm64[0].data.unsqueeze(0), outname=os.path.join(args.checkpoint,"hm64.png"))
+            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm64_gt.png"))
+            
             show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
 
@@ -593,7 +595,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
     bar.finish()
 
-    return losses.avg, losses_g.avg, losses_d.avg, acces.avg,\
+    return losses.avg, losses_g.avg, losses_d.avg,\
            lossesRegressor.avg, lossesDepth.avg, lossesLap.avg, acces.avg
 
 
