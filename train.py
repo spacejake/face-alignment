@@ -83,6 +83,9 @@ def get_loader(data):
         # 'LS3D-W': LS3DW,
     }[dataset]
 
+def get_agan_threashold(a, iter, min):
+    return a*iter**2+min
+
 def main(args):
     global best_acc
     global best_auc
@@ -268,14 +271,22 @@ def main(args):
         pin_memory=True)
     lr = args.lr
 
-    cgan_error_threshold_decrease = 0.001
-    cgan_threashold_decrement = 0.01
-    cgan_threashold_min = 0.03
-    cgan_threashold = 0.07
+    ## A-GAN (Adaptive GAN Threasholding)
+    agan_error_threshold_decrease = 0.001 # Make Threashold reduction step wnen error below this value
+    #agan_threashold_decrement = 0.002 # Change at epoch 10, Decrease too agressive, need to make finer approaching min.
 
-    
-    print("Conditional GAN Initial threashold: {}".format(cgan_threashold))
+    # At epoch 10, changed to a quadratic function ax^2 + min_threashold
+    agan_threashold_coeff = 5e-4
+    agan_threashold_max_iter = 10
+    agan_threashold_min = 0.02 # Change At epoch 10, 0.03->0.02, network should be capable of better
 
+    # Initialize
+    agan_threashold_iter = agan_threashold_max_iter-3 # Stopped at epoch 10, set to 3
+    agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_iter, agan_threashold_min)
+
+    print("Conditional GAN Initial threashold: {}".format(agan_threashold))
+
+    ## Train
     for epoch in range(args.start_epoch, args.epochs):
         if optimizer.FAN is not None:
             lr_fan = adjust_learning_rate(optimizer.FAN, epoch, lr, args.schedule, args.gamma)
@@ -289,7 +300,7 @@ def main(args):
         print('=> Epoch: %d | LR_G %.8f | LR_D %.8f' % (epoch + 1, lr, lr_hm_d))
 
         train_loss, train_losslmk, loss_g, loss_d, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
-                                      debug=args.debug, flip=args.flip, device=device, conf_gan_thr=cgan_threashold)
+                                      debug=args.debug, flip=args.flip, device=device, conf_gan_thr=agan_threashold)
 
         # do not save predictions in model file
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
@@ -301,9 +312,10 @@ def main(args):
         best_auc = max(valid_auc, best_auc)
 
         # Slowly increase the Descriminator's allowed threashold to increase the challenge of defeating the network
-        if loss_g < cgan_error_threshold_decrease and cgan_threashold > cgan_threashold_min:
-            cgan_threashold -= cgan_threashold_decrement
-            print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, cgan_error_threshold_decrease, cgan_threashold))
+        if loss_g < agan_error_threshold_decrease and agan_threashold_step > 0:
+            agan_threashold_step -= 1
+            agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_step, agan_threashold_min)
+            print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, agan_error_threshold_decrease, agan_threashold))
             
 
         if train_fan:
