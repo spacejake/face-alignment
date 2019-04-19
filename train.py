@@ -83,7 +83,7 @@ def get_loader(data):
         # 'LS3D-W': LS3DW,
     }[dataset]
 
-def get_agan_threshold(a, iter, min):
+def get_agan_threashold(a, iter, min):
     return a*iter**2+min
 
 def main(args):
@@ -271,20 +271,20 @@ def main(args):
         pin_memory=True)
     lr = args.lr
 
-    ## A-GAN (Adaptive GAN Thresholding)
-    agan_error_threshold_decrease = 0.001 # Make Threshold reduction step wnen error below this value
+    ## A-GAN (Adaptive GAN Threasholding)
+    agan_error_threshold_decrease = 0.001 # Make Threashold reduction step wnen error below this value
+    #agan_threashold_decrement = 0.002 # Change at epoch 10, Decrease too agressive, need to make finer approaching min.
 
-    agan_threshold_coeff = 5e-4
-    agan_threshold_max_steps = 10
-    agan_threshold_min = 0.02
+    # At epoch 10, changed to a quadratic function ax^2 + min_threashold
+    agan_threashold_coeff = 5e-4
+    agan_threashold_max_steps = 10
+    agan_threashold_min = 0.02 # Change At epoch 10, 0.03->0.02, network should be capable of better
 
     # Initialize
-    #agan_threashold_step = agan_threashold_max_steps-3 # Stopped at epoch 10 after 3 steps, set to 3
-    agan_threshold_step = agan_threshold_max_steps
-    agan_threshold = get_agan_threshold(agan_threshold_coeff,
-                                          agan_threshold_step,
-                                          agan_threshold_min)
-    print("Conditional GAN Initial threshold: {}".format(agan_threshold))
+    agan_threashold_step = agan_threashold_max_steps-3 # Stopped at epoch 10 after 3 steps, set to 3
+    agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_step, agan_threashold_min)
+
+    print("Conditional GAN Initial threashold: {}".format(agan_threashold))
 
     ## Train
     for epoch in range(args.start_epoch, args.epochs):
@@ -300,7 +300,7 @@ def main(args):
         print('=> Epoch: %d | LR_G %.8f | LR_D %.8f' % (epoch + 1, lr, lr_hm_d))
 
         train_loss, train_losslmk, loss_g, loss_d, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
-                                      debug=args.debug, flip=args.flip, device=device, conf_gan_thr=agan_threshold)
+                                      debug=args.debug, flip=args.flip, device=device, conf_gan_thr=agan_threashold)
 
         # do not save predictions in model file
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
@@ -311,13 +311,11 @@ def main(args):
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
 
-        # Slowly increase the Descriminator's allowed threshold to increase the challenge of defeating the network
-        if loss_g < agan_error_threshold_decrease and agan_threshold_step > 0:
-            agan_threshold_step -= 1
-            agan_threshold = get_agan_threshold(agan_threshold_coeff,
-                                                  agan_threshold_step,
-                                                  agan_threshold_min)
-            print("Gan error threshold met: {} < {}, decreasing Descriminator's threshold: {}".format(loss_g, agan_error_threshold_decrease, agan_threshold))
+        # Slowly increase the Descriminator's allowed threashold to increase the challenge of defeating the network
+        if loss_g < agan_error_threshold_decrease and agan_threashold_step > 0:
+            agan_threashold_step -= 1
+            agan_threashold = get_agan_threashold(agan_threashold_coeff, agan_threashold_step, agan_threashold_min)
+            print("Gan error threashold met: {} < {}, decreasing Descriminator's threashold: {}".format(loss_g, agan_error_threshold_decrease, agan_threashold))
             
 
         if train_fan:
@@ -388,7 +386,7 @@ def backwardG(fake, loss_hm, model, opt, crit, weight_hm=1.0):
 
 
 def backwardD(fake, real, model, opt, crit, thr=0.07):
-    # Discrinimator labels (%NME @ threshold)
+    # Discrinimator labels (%NME @ threashold)
     pred_pts, _ = get_preds_fromhm(fake[:, 3:].detach().cpu())
     target_pts, _ = get_preds_fromhm(real[:, 3:].detach().cpu())
     acc, batch_dists = accuracy_points(pred_pts, target_pts, idx, thr=thr)
