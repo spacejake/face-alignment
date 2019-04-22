@@ -187,7 +187,7 @@ def main(args):
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
-        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
+        logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train HM Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
     if args.resume_depth and train_depth:
         if os.path.isfile(args.resume_depth):
@@ -244,14 +244,16 @@ def main(args):
 
         print('=> Epoch: %d | LR %.8f' % (epoch + 1, lr))
 
-        train_loss, train_losslmk, train_acc = train(train_loader, model, criterion, optimizer, args.netType, epoch,
-                                      debug=args.debug, flip=args.flip, device=device)
+        train_loss, train_losshm, train_losslmk, train_acc = \
+            train(train_loader, model, criterion, optimizer, args.netType, epoch,
+                  debug=args.debug, flip=args.flip, device=device)
 
         # do not save predictions in model file
         valid_loss, valid_losslmk, valid_acc, predictions, valid_auc = validate(val_loader, model, criterion, args.netType,
                                                       args.debug, args.flip, device=device)
 
-        logger.append([int(epoch + 1), lr, train_loss, train_losslmk, valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
+        logger.append([int(epoch + 1), lr, train_loss, train_losshm, train_losslmk,
+                       valid_loss, valid_losslmk, train_acc, valid_acc, valid_auc])
 
         is_best = valid_auc >= best_auc
         best_auc = max(valid_auc, best_auc)
@@ -296,6 +298,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    losseshm = AverageMeter()
     losseslmk = AverageMeter()
     acces = AverageMeter()
 
@@ -321,6 +324,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
+        loss_hm = torch.zeros([1], dtype=torch.float32)[0]
+        pts = None
         if train_fan:
             # Forward
             output = model.FAN(input_var)
@@ -334,18 +339,33 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
             # Supervision
             # Intermediate supervision
+            pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+            hm64_gen = gen_heatmap(pts, dim=(pts.size(0), 68, 64, 64))
+            hm64_gen = hm64_gen.to(device)
+
             loss = 0
+            loss_hm = 0
             for out_inter in output:
                 loss += criterion.hm(out_inter, target_hm64)
 
+                '''
+                Heatmap Gauss Loss
+                Enforce GT gauss distribution on Maximum value and clean up hm noise
+                '''
+                loss_hm += criterion.hm(out_inter, hm64_gen)
+
+            lossFAN = loss + loss_hm
+
             # Back-prop
             optimizer.FAN.zero_grad()
-            loss.backward()
+            lossFAN.backward()
             optimizer.FAN.step()
         else:
             out_hm = target.heatmap64
-        
-        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+
+        if pts is None:
+            pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+
         pts = pts * 4 # 64->256
 
         # DEPTH
@@ -371,9 +391,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
-        losses.update(loss.data, inputs.size(0))
-        losseslmk.update(lossDepth.data, inputs.size(0))
-        acces.update(acc[0], inputs.size(0))
+        batch_size = inputs.size(0)
+        losses.update(loss.data, batch_size)
+        losseshm.update(loss_hm.data, batch_size)
+        losseslmk.update(lossDepth.data, batch_size)
+        acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
@@ -389,7 +411,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
         batch_time.update(time.time() - end)
         end = time.time()
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | LossLmk: {losslmk: .4f} | Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
+                     'Loss: {loss:.4f} |  LossHM: {losshm:.4f} | LossLmk: {losslmk: .4f} | Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
@@ -397,13 +420,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
+            losshm=losseshm.avg,
             losslmk=losseslmk.avg,
             acc=acces.avg)
         bar.next()
 
     bar.finish()
 
-    return losses.avg, losseslmk.avg, acces.avg
+    return losses.avg, losseshm.avg, losseslmk.avg, acces.avg
 
 def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
