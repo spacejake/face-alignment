@@ -48,7 +48,7 @@ def draw_gaussian(image, point, sigma, g=None):
     ul = [torch.floor(point[0] - 3 * sigma), torch.floor(point[1] - 3 * sigma)]
     br = [torch.floor(point[0] + 3 * sigma), torch.floor(point[1] + 3 * sigma)]
     if (ul[0] > image.shape[1] or ul[1] > image.shape[0] or br[0] < 1 or br[1] < 1):
-        return image
+        return image, g
     size = 6 * sigma + 1
     g = torch.from_numpy(_gaussian(size)).float()
     g_x = [int(max(1, -ul[0])), int(min(br[0], image.shape[1])) - int(max(1, ul[0])) + int(max(1, -ul[0]))]
