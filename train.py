@@ -452,7 +452,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         pts = pts * 4 # 64->256
 
         if val_fan:
-            heatmaps = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256))
+            heatmaps = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2)
         else:
             heatmaps = target.heatmap256.to(device)
 

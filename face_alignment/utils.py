@@ -62,7 +62,7 @@ def draw_gaussian(image, point, sigma, g=None):
     return image, g
 
 
-def gen_heatmap(pts, dim=(1,68,256,256)):
+def gen_heatmap(pts, dim=(1,68,256,256), sigma=2):
     heatmaps = torch.zeros(dim, dtype=torch.float)
     tpts = pts.clone()
     gauss = None
@@ -70,7 +70,7 @@ def gen_heatmap(pts, dim=(1,68,256,256)):
         for n in range(68):
             if tpts[b, n, 0] > 0:
                 heatmaps[b, n], gauss = draw_gaussian(
-                    heatmaps[b, n], tpts[b, n], 2, g=gauss)
+                    heatmaps[b, n], tpts[b, n], sigma, g=gauss)
     return heatmaps
 
 def getTransform(center, scale, resolution, rotate=0):
