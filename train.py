@@ -405,7 +405,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
 
     return losses.avg, losseslmk.avg, acces.avg
 
-
 def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -453,14 +452,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         pts = pts * 4 # 64->256
 
         if val_fan:
-            heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-            tpts = pts.clone()
-            for b in range(pts.size(0)):
-                for n in range(68):
-                    if tpts[b, n, 0] > 0:
-                        heatmaps[b, n] = draw_gaussian(
-                            heatmaps[b, n], tpts[b, n], 2)
-            heatmaps = heatmaps.to(device)
+            heatmaps = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256))
         else:
             heatmaps = target.heatmap256.to(device)
 

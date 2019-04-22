@@ -43,7 +43,7 @@ def _gaussian(
     return gauss
 
 
-def draw_gaussian(image, point, sigma):
+def draw_gaussian(image, point, sigma, g=None):
     # Check if the gaussian is inside
     ul = [torch.floor(point[0] - 3 * sigma), torch.floor(point[1] - 3 * sigma)]
     br = [torch.floor(point[0] + 3 * sigma), torch.floor(point[1] + 3 * sigma)]
@@ -59,7 +59,19 @@ def draw_gaussian(image, point, sigma):
     image[img_y[0] - 1:img_y[1], img_x[0] - 1:img_x[1]
           ] = image[img_y[0] - 1:img_y[1], img_x[0] - 1:img_x[1]] + g[g_y[0] - 1:g_y[1], g_x[0] - 1:g_x[1]]
     image[image > 1] = 1
-    return image
+    return image, g
+
+
+def gen_heatmap(pts, dim=(1,68,256,256)):
+    heatmaps = torch.zeros(dim, dtype=torch.float)
+    tpts = pts.clone()
+    gauss = None
+    for b in range(pts.size(0)):
+        for n in range(68):
+            if tpts[b, n, 0] > 0:
+                heatmaps[b, n], gauss = draw_gaussian(
+                    heatmaps[b, n], tpts[b, n], 2, g=gauss)
+    return heatmaps
 
 def getTransform(center, scale, resolution, rotate=0):
     """Generate and affine transformation matrix.

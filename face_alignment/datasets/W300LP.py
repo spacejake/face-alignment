@@ -120,11 +120,12 @@ class W300LP(data.Dataset):
         pts = raw_pts.clone()
         heatmap256 = torch.zeros(self.nParts, 256, 256)
         transMat256 = getTransform(c, s, 256, rotate=r)
+        g256 = None
         for i in range(self.nParts):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i], transMat256)
                 pts[i, :2] = pts[i, :2]-1
-                heatmap256[i] = draw_gaussian(heatmap256[i], pts[i, 0:2], 2)
+                heatmap256[i], g256 = draw_gaussian(heatmap256[i], pts[i, 0:2], 2, g=g256)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -133,10 +134,11 @@ class W300LP(data.Dataset):
         tpts = raw_pts.clone()
         heatmap64 = torch.zeros(self.nParts, 64, 64)
         transMat64 = getTransform(c, s, 64, rotate=r)
+        g64 = None
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
-                heatmap64[i] = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1)
+                heatmap64[i], g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         return inp, heatmap64, heatmap256, pts, c, s
@@ -189,8 +191,8 @@ if __name__=="__main__":
         target = Target._make(label)
         show_joints3D(target.pts.squeeze(0))
         show_joints(input.squeeze(0), target.pts.squeeze(0))
-        #show_heatmap(target.heatmap64)
-        #show_heatmap(target.heatmap256)
+        show_heatmap(target.heatmap64)
+        show_heatmap(target.heatmap256)
 
         # TEST 256 heatmap extraction
         test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
