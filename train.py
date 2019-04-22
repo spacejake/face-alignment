@@ -279,7 +279,7 @@ def main(args):
     agan_error_threshold_decrease = 0.001 # Make Threshold reduction step wnen error below this value
 
     agan_threshold_coeff = 5e-4
-    agan_threshold_max_steps = 10
+    agan_threshold_max_steps = 13
     agan_threshold_min = 0.02
 
     # Initialize
@@ -488,7 +488,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             in64 = in64.to(device)  # CUDA interpolate may be nondeterministic
             fake_in = torch.cat((in64, out_hm64), 1)  # Concat input image with corresponding intermediate heatmaps
             loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
-                                         weight_hm=1)
+                                         weight_hm=10.0)
 
             # Concat input image with corresponding intermediate heatmaps
             real_in = torch.cat((in64, target_hm64), 1)
