@@ -325,7 +325,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
         loss_hm = torch.zeros([1], dtype=torch.float32)[0]
-        pts = None
         if train_fan:
             # Forward
             output = model.FAN(input_var)
@@ -363,10 +362,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         else:
             out_hm = target.heatmap64
 
-        if pts is None:
-            pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-
-        pts = pts * 4 # 64->256
+        if train_fan:
+            pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+            pts = pts * 4 # 64->256
+        else:
+            pts = target.pts[:,:,:2]
 
         # DEPTH
         lossDepth =  torch.zeros([1], dtype=torch.float32)[0]
@@ -472,12 +472,12 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         else:
             out_hm = target.heatmap64
 
-        pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
-        pts = pts * 4 # 64->256
-
         if val_fan:
+            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
+            pts = pts * 4 # 64->256
             heatmaps = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2)
         else:
+            pts = target.pts[:,:,:2]
             heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
