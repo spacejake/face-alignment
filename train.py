@@ -480,18 +480,12 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
             # Back-prop
             # FA-GAN and Back-prop
-            in64 = torch.nn.functional.interpolate(inputs,
-                                                   size=(64, 64),
-                                                   mode='bilinear',
-                                                   align_corners=True)
-
-            in64 = in64.to(device)  # CUDA interpolate may be nondeterministic
-            fake_in = torch.cat((in64, out_hm64), 1)  # Concat input image with corresponding intermediate heatmaps
+            fake_in = torch.cat((inputs, out_hm), 1)  # Concat input image with corresponding intermediate heatmaps
             loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
                                          weight_hm=10.0)
 
             # Concat input image with corresponding intermediate heatmaps
-            real_in = torch.cat((in64, target_hm64), 1)
+            real_in = torch.cat((inputs, target_hm256), 1)
             loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm,
                                                          criterion.d_hm, thr=conf_gan_thr)
 
