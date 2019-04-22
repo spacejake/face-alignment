@@ -391,11 +391,8 @@ def backwardG(fake, loss_hm, model, opt, crit, weight_hm=1.0):
     return loss_G_total, loss_G
 
 
-def backwardD(fake, real, model, opt, crit, thr=0.07):
-    # Discrinimator labels (%NME @ threshold)
-    pred_pts, _ = get_preds_fromhm(fake[:, 3:].detach().cpu())
-    target_pts, _ = get_preds_fromhm(real[:, 3:].detach().cpu())
-    acc, batch_dists = accuracy_points(pred_pts, target_pts, idx, thr=thr)
+def backwardD(fake, fake_pts, real, real_pts, model, opt, crit, thr=0.07):
+    acc, batch_dists = accuracy_points(fake_pts, real_pts, idx, thr=thr)
 
     # Fake Score is %NME of points < threshold per batch
     fake_score = torch.mean(batch_dists.le(thr).float(), 0).cuda()
@@ -479,25 +476,27 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             out_hm64 = output[-1]
 
             # Back-prop
+            # Concat input image with corresponding intermediate heatmaps
             # FA-GAN and Back-prop
-            fake_in = torch.cat((inputs, out_hm), 1)  # Concat input image with corresponding intermediate heatmaps
+            fake_in = torch.cat((input_var, out_hm), 1)  # Concat input image with corresponding intermediate heatmaps
             loss_gan, loss_g = backwardG(fake_in, loss * 1, model.D_hm, optimizer.FAN, criterion.d_hm,
                                          weight_hm=10.0)
 
-            # Concat input image with corresponding intermediate heatmaps
-            real_in = torch.cat((inputs, target_hm256), 1)
-            loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, real_in, model.D_hm, optimizer.D_hm,
+            # Discrinimator labels (%NME @ threshold)
+            pred_pts, _ = get_preds_fromhm(out_hm.detach().cpu())
+
+            real_in = torch.cat((input_var, target_hm256), 1)
+            loss_d, loss_d_real, loss_d_fake = backwardD(fake_in, pred_pts,
+                                                         real_in, target.pts[:, :, :2],
+                                                         model.D_hm, optimizer.D_hm,
                                                          criterion.d_hm, thr=conf_gan_thr)
 
             out_hm = out_hm.cpu()
             out_hm64 = out_hm64.cpu()
+            pts = pred_pts
         else:
             out_hm = target.heatmap256
             out_hm64 = target.heatmap64
-
-        if train_fan:
-            pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-        else:
             pts = target.pts[:,:,:2]
 
         # DEPTH
@@ -589,6 +588,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             lossLap=lossesLap.avg,
             acc=acces.avg)
         bar.next()
+
 
     bar.finish()
 
