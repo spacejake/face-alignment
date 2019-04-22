@@ -494,8 +494,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         else:
             out_hm = target.heatmap256
             out_hm64 = target.heatmap64
-        
-        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+
+        if train_fan:
+            pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+        else:
+            pts = target.pts[:,:,:2]
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
@@ -641,8 +644,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             output = target.heatmap64.unsqueeze(0)
             out_hm = target.heatmap256
 
-        pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
         if val_fan:
+            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
             heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
             tpts = pts.clone()
             for b in range(pts.size(0)):
@@ -652,6 +655,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                             heatmaps[b, n], tpts[b, n], 2)
             heatmaps = heatmaps.to(device)
         else:
+            pts = target.pts[:,:,:2]
             heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
