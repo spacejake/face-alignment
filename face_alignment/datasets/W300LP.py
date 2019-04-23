@@ -52,6 +52,9 @@ class W300LP(data.Dataset):
         self.total = len(self.anno)
         self.mean, self.std = self._comput_mean()
 
+        self.g64 = None
+        self.g256 = None
+
     def _getDataFaces(self, is_train):
         base_dir = self.lmk_dir
 
@@ -120,12 +123,11 @@ class W300LP(data.Dataset):
         pts = raw_pts.clone()
         heatmap256 = torch.zeros(self.nParts, 256, 256)
         transMat256 = getTransform(c, s, 256, rotate=r)
-        g256 = None
         for i in range(self.nParts):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i], transMat256)
                 pts[i, :2] = pts[i, :2]-1
-                heatmap256[i], g256 = draw_gaussian(heatmap256[i], pts[i, 0:2], 2, g=g256)
+                heatmap256[i], self.g256 = draw_gaussian(heatmap256[i], pts[i, 0:2], 2, g=self.g256)
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -134,11 +136,10 @@ class W300LP(data.Dataset):
         tpts = raw_pts.clone()
         heatmap64 = torch.zeros(self.nParts, 64, 64)
         transMat64 = getTransform(c, s, 64, rotate=r)
-        g64 = None
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
-                heatmap64[i], g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=g64)
+                heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=self.g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         return inp, heatmap64, heatmap256, pts, c, s

@@ -38,6 +38,7 @@ model_names = sorted(
 best_acc = 0.
 best_auc = 0.
 idx = range(1, 69, 1)
+gauss_256 = None
 
 class Model(NamedTuple):
     FAN: torch.nn.Module
@@ -135,7 +136,7 @@ def main(args):
     model = Model(face_alignment_net, depth_net)
 
     # Loss Functions
-    hm_crit = torch.nn.MSELoss(size_average=True).to(device)
+    hm_crit = torch.nn.MSELoss(reduction='mean').to(device)
     pnt_crit = torch.nn.MSELoss(reduction='mean').to(device)
     criterion = Criterion(hm_crit, pnt_crit)
 
@@ -454,7 +455,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         if val_fan:
             pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
             pts = pts * 4 # 64->256
-            heatmaps = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2)
+            heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
         else:
             pts = target.pts[:,:,:2]
             heatmaps = target.heatmap256.to(device)
