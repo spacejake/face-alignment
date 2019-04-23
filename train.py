@@ -38,6 +38,7 @@ model_names = sorted(
 best_acc = 0.
 best_auc = 0.
 idx = range(1, 69, 1)
+gauss_256 = None
 
 class Model(NamedTuple):
     FAN: torch.nn.Module
@@ -351,8 +352,12 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             optimizer.FAN.step()
         else:
             out_hm = target.heatmap256
-        
-        pts, pts_orig = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+
+        if train_fan:
+            pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
+            pts = pts * 4 # 64->256
+        else:
+            pts = target.pts[:,:,:2]
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
@@ -403,6 +408,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
+
             io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave(os.path.join(args.checkpoint,"input-with-gt-hm64.png"),sample_hm)
@@ -429,7 +435,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     bar.finish()
 
     return losses.avg, lossesRegressor.avg, lossesDepth.avg, lossesLap.avg, acces.avg
-
 
 def validate(loader, model, criterion, netType, debug, flip, device):
     batch_time = AverageMeter()
@@ -476,20 +481,12 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             output = target.heatmap64.unsqueeze(0)
             out_hm = target.heatmap256
 
-        pts, pts_img = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
-        # pts = pts * 4 # 64->256
-
-        # if self.landmarks_type == LandmarksType._3D:
         if val_fan:
-            heatmaps = torch.zeros((pts.size(0), 68, 256, 256), dtype=torch.float)
-            tpts = pts.clone()
-            for b in range(pts.size(0)):
-                for n in range(68):
-                    if tpts[b, n, 0] > 0:
-                        heatmaps[b, n] = draw_gaussian(
-                            heatmaps[b, n], tpts[b, n], 2)
-            heatmaps = heatmaps.to(device)
+            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
+            pts = pts * 4 # 64->256
+            heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
         else:
+            pts = target.pts[:,:,:2]
             heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
@@ -509,11 +506,13 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         if val_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
+
             show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
             show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
+
             io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
@@ -545,6 +544,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
     bar.finish()
     mean_error = torch.mean(all_dists)
+
     auc = calc_metrics(all_dists, path=args.checkpoint, category='300W-Testset', method='Ours') # this is auc of predicted maps and target.
     print("=> Mean Error: {:.2f}, AUC@0.07: {} based on maps".format(mean_error*100., auc))
     return losses.avg, losseslmk.avg, acces.avg, predictions, auc
