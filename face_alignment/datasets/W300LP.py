@@ -51,12 +51,14 @@ class W300LP(data.Dataset):
         self.is_train = self.split is Split.train
         self.anno = self._getDataFaces(self.is_train)
         self.total = len(self.anno)
-        self.mean, self.std = self._comput_mean()
+        self.mean, self.std = self._preprocess()
 
         # Load pre-computed laplacian matrix
         laplacianData = sio.loadmat(
             os.path.join(self.img_dir, 'laplacian.mat'))
         self.laplcian = torch.from_numpy(laplacianData['L']).float()
+        # Load faces, subtract by 1 to convert to 0-indexing in python (vs Matlab)
+        self.faces = torch.from_numpy(laplacianData['F'])-1
         self.g64 = None
         self.g256 = None
 
@@ -84,8 +86,8 @@ class W300LP(data.Dataset):
         return self.total
 
     def __getitem__(self, index):
-        inp, heatmap64, heatmap256, pts, lap_pts, center, scale = self.generateSampleFace(index)
-        target = Target(heatmap64, heatmap256, pts, lap_pts, center, scale)
+        inp, heatmap64, heatmap256, pts, center, scale = self.generateSampleFace(index)
+        target = Target(heatmap64, heatmap256, pts, center, scale)
         if self.is_train:
             return inp, target
         else:
@@ -148,11 +150,12 @@ class W300LP(data.Dataset):
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         # Compute Target Laplacian vectors
-        lap_pts = compute_laplacian(self.laplcian, pts)
+        # lap_pts = compute_laplacian(self.laplcian, pts)
 
-        return inp, heatmap64, heatmap256, pts, lap_pts, c, s
+        #return inp, heatmap64, heatmap256, pts, lap_pts, c, s
+        return inp, heatmap64, heatmap256, pts, c, s
 
-    def _comput_mean(self):
+    def _preprocess(self):
         meanstd_file = os.path.join(self.img_dir, 'mean.pth.tar')
         if os.path.isfile(meanstd_file):
             ms = torch.load(meanstd_file)
