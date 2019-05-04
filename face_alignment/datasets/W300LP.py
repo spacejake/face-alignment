@@ -12,24 +12,14 @@ from mpl_toolkits.mplot3d import Axes3D
 import torch
 import torch.utils.data as data
 
-from face_alignment.datasets.common import Split, Target
+from face_alignment.datasets.common import Split, Target, compute_laplacian
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
 
-
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
 '''
-
-def get_loader(data):
-    dataset = os.path.basename(os.path.normpath(data))
-    return {
-        '300W_LP': W300LP,
-        # 'LS3D-W/300VW-3D': VW300,
-        # 'AFLW2000': AFLW2000,
-        # 'LS3D-W': LS3DW,
-    }[dataset]
 
 class W300LP(data.Dataset):
 
@@ -50,10 +40,13 @@ class W300LP(data.Dataset):
         self.is_train = self.split is Split.train
         self.anno = self._getDataFaces(self.is_train)
         self.total = len(self.anno)
-        self.mean, self.std = self._comput_mean()
+        self.load_extras()
 
         self.g64 = None
         self.g256 = None
+
+    def load_extras(self):
+        self.mean, self.std = self._preprocess()
 
     def _getDataFaces(self, is_train):
         base_dir = self.lmk_dir
@@ -177,9 +170,9 @@ if __name__=="__main__":
     import face_alignment.util.opts as opts
 
     args = opts.argparser()
-    args.data = "../../"+args.data
+    args.data = "../../data/300W_LP"
     # dataset = W300LP(args, Split.test)
-    datasetLoader = get_loader(args.data)
+    datasetLoader = W300LP
     crop_win = None
     loader = torch.utils.data.DataLoader(
         datasetLoader(args, 'train'),

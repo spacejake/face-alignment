@@ -22,6 +22,7 @@ from face_alignment.models import FAN, ResNetDepth
 from face_alignment.utils import *
 
 from face_alignment.datasets.W300LP import W300LP
+from face_alignment.datasets.AFLW2000 import AFLW2000
 from face_alignment.datasets.common import Target
 
 
@@ -71,9 +72,10 @@ def get_loader(data):
     return {
         '300W_LP': W300LP,
         # 'LS3D-W/300VW-3D': VW300,
-        # 'AFLW2000': AFLW2000,
+        'AFLW2000': AFLW2000,
         # 'LS3D-W': LS3DW,
     }[dataset]
+
 
 def main(args):
     global best_acc
