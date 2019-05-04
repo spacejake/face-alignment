@@ -21,8 +21,9 @@ from face_alignment.api import NetworkSize
 from face_alignment.models import FAN, ResNetDepth
 from face_alignment.utils import *
 
-from face_alignment.datasets.W300LP import W300LP, compute_laplacian
-from face_alignment.datasets.common import Target
+from face_alignment.datasets.W300LP import W300LP
+from face_alignment.datasets.AFLW2000 import AFLW2000
+from face_alignment.datasets.common import Target, compute_laplacian
 
 
 from face_alignment.util.logger import Logger, savefig
@@ -72,13 +73,15 @@ def get_loader(data):
     return {
         '300W_LP': W300LP,
         # 'LS3D-W/300VW-3D': VW300,
-        # 'AFLW2000': AFLW2000,
+        'AFLW2000': AFLW2000,
         # 'LS3D-W': LS3DW,
     }[dataset]
+
 
 def main(args):
     global best_acc
     global best_auc
+    global gauss_256
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if not os.path.exists(args.checkpoint):
@@ -459,6 +462,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     gt_win, pred_win = None, None
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
+    gauss_256 = None
     for val_idx, (inputs, label, meta) in enumerate(loader):
         target = Target._make(label)
         data_time.update(time.time() - end)

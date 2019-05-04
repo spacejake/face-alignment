@@ -16,3 +16,8 @@ class Target(NamedTuple):
     lap_pts:  torch.tensor
     center: torch.tensor
     scale: torch.tensor
+
+def compute_laplacian(laplacianMat, points):
+    lap_pts = torch.matmul(laplacianMat, points)
+
+    return lap_pts

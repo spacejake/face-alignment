@@ -50,7 +50,8 @@ def draw_gaussian(image, point, sigma, g=None):
     if (ul[0] > image.shape[1] or ul[1] > image.shape[0] or br[0] < 1 or br[1] < 1):
         return image, g
     size = 6 * sigma + 1
-    g = torch.from_numpy(_gaussian(size)).float()
+    if g is None:
+        g = torch.from_numpy(_gaussian(size)).float()
     g_x = [int(max(1, -ul[0])), int(min(br[0], image.shape[1])) - int(max(1, ul[0])) + int(max(1, -ul[0]))]
     g_y = [int(max(1, -ul[1])), int(min(br[1], image.shape[0])) - int(max(1, ul[1])) + int(max(1, -ul[1]))]
     img_x = [int(max(1, ul[0])), int(min(br[0], image.shape[1]))]
@@ -62,16 +63,16 @@ def draw_gaussian(image, point, sigma, g=None):
     return image, g
 
 
-def gen_heatmap(pts, dim=(1,68,256,256), sigma=2):
+def gen_heatmap(pts, dim=(1,68,256,256), sigma=2, g=None):
     heatmaps = torch.zeros(dim, dtype=torch.float)
     tpts = pts.clone()
-    gauss = None
+    gauss = g
     for b in range(pts.size(0)):
         for n in range(68):
             if tpts[b, n, 0] > 0:
                 heatmaps[b, n], gauss = draw_gaussian(
                     heatmaps[b, n], tpts[b, n], sigma, g=gauss)
-    return heatmaps
+    return heatmaps, gauss
 
 def getTransform(center, scale, resolution, rotate=0):
     """Generate and affine transformation matrix.
