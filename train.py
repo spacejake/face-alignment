@@ -379,7 +379,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts256)
             lossLap = criterion.laplacian(pred_lap, target_lap)
 
-            lossRegressor = lossDepth + 0.1 * lossLap
+            lossRegressor = lossDepth + 0.5 * lossLap
 
             depth_pred = depth_pred.cpu()
 
@@ -409,9 +409,13 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
 
-            io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
-            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave(os.path.join(args.checkpoint,"input-with-gt-hm64.png"),sample_hm)
+            if train_fan:
+                show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
+                show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
+                sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
+                io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
+                sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+                io.imsave(os.path.join(args.checkpoint,"input-with-gt-hm64.png"),sample_hm)
 
         batch_time.update(time.time() - end)
         end = time.time()
@@ -507,15 +511,16 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
 
-            show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
-            show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
-            show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
-            show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
-            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
+            if val_fan:
+                show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
+                show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
+                show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
+                show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
 
-            io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
-            sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
-            io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
+                sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
+                io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
+                sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
+                io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
