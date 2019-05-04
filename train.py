@@ -80,6 +80,7 @@ def get_loader(data):
 def main(args):
     global best_acc
     global best_auc
+    global gauss_256
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if not os.path.exists(args.checkpoint):
@@ -430,6 +431,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     gt_win, pred_win = None, None
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
+    gauss_256 = None
     for val_idx, (inputs, label, meta) in enumerate(loader):
         target = Target._make(label)
         data_time.update(time.time() - end)

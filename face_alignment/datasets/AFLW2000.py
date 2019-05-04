@@ -48,7 +48,7 @@ class AFLW2000(W300LP):
         mins_ = torch.min(raw_pts, 0)[0].view(3) # min vals
         maxs_ = torch.max(raw_pts, 0)[0].view(3) # max vals
         c = torch.FloatTensor((maxs_[0]-(maxs_[0]-mins_[0])/2, maxs_[1]-(maxs_[1]-mins_[1])/2))
-        c[1] -= ((maxs_[1]-mins_[1]) * 0.12)
+        c[1] -= ((maxs_[1]-mins_[1]) * 0.12).float()
         s = (maxs_[0]-mins_[0]+maxs_[1]-mins_[1])/195
 
         img = load_image(self.anno[idx][:-4] + '.jpg')
@@ -96,7 +96,7 @@ class AFLW2000(W300LP):
         # lap_pts = compute_laplacian(self.laplcian, pts)
 
         #return inp, heatmap64, heatmap256, pts, lap_pts, c, s
-        return inp, heatmap64, heatmap256, pts, c, s
+        return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), c.float(), s.float()
 
 
 if __name__=="__main__":
