@@ -18,6 +18,8 @@ def argparser():
     P.add_argument('-c', '--checkpoint', type=str, default='checkpoint', help='model save path')
     P.add_argument('--resume', type=str, default='', help='resume from lastest saved FAN checkpoints')
     P.add_argument('--resume-depth', type=str, default='', help='resume from lastest saved Depth checkpoints')
+    P.add_argument('--pretrained', action='store_true', help='Use pretrained Network')
+
     P.add_argument('--lr', type=float, default=1e-4, help='initial learning rate')
     P.add_argument('--momentum', type=float, default=0.0, help='momentum')
     P.add_argument('--weight-decay', type=float, default=0.0, help='weight decay')

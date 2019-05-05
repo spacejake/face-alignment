@@ -46,7 +46,7 @@ class W300LP(data.Dataset):
         self.g256 = None
 
     def load_extras(self):
-        self.mean, self.std = self._preprocess()
+        self.mean, self.std = self._comput_mean()
 
     def _getDataFaces(self, is_train):
         base_dir = self.lmk_dir
@@ -135,6 +135,8 @@ class W300LP(data.Dataset):
                 heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=self.g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
+        # show_joints(img.squeeze(0), raw_pts.squeeze(0))
+        # show_joints(inp.squeeze(0), pts.squeeze(0))
         return inp, heatmap64, heatmap256, pts, c, s
 
     def _comput_mean(self):
@@ -175,7 +177,7 @@ if __name__=="__main__":
     datasetLoader = W300LP
     crop_win = None
     loader = torch.utils.data.DataLoader(
-        datasetLoader(args, 'train'),
+        datasetLoader(args, 'test'),
         batch_size=1,
         #shuffle=True,
         num_workers=1,

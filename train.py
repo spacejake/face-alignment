@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+from torch.utils.model_zoo import load_url
 import itertools
 
 from face_alignment import models
@@ -76,6 +77,11 @@ def get_loader(data):
         # 'LS3D-W': LS3DW,
     }[dataset]
 
+models_urls = {
+    '2DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/2DFAN4-11f355bf06.pth.tar',
+    '3DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/3DFAN4-7835d9f11d.pth.tar',
+    'depth': 'https://www.adrianbulat.com/downloads/python-fan/depth-2a464da4ea.pth.tar',
+}
 
 def main(args):
     global best_acc
@@ -190,6 +196,10 @@ def main(args):
         else:
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
+        if args.pretrained and train_fan:
+            fan_weights = load_url(models_urls['3DFAN-4'], map_location=lambda storage, loc: storage)
+            model.FAN.load_state_dict(fan_weights)
+
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
         logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
@@ -211,7 +221,12 @@ def main(args):
             # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
         else:
             print("=> no Depth checkpoint found at '{}'".format(args.resume_depth))
-
+    elif args.pretrained and train_depth:
+        depth_weights = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
+        depth_dict = {
+            k.replace('module.', ''): v for k,
+                                            v in depth_weights['state_dict'].items()}
+        model.Depth.load_state_dict(depth_dict)
 
     cudnn.benchmark = True
     if train_fan:
