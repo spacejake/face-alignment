@@ -12,7 +12,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import torch
 import torch.utils.data as data
 
-from face_alignment.datasets.common import Split, Target, compute_laplacian
+from face_alignment.datasets.common import Split, Target, compute_laplacian, SpatialSoftmax
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
@@ -46,7 +46,7 @@ class W300LP(data.Dataset):
         self.g256 = None
 
     def load_extras(self):
-        self.mean, self.std = self._preprocess()
+        self.mean, self.std = self._comput_mean()
 
         # Load pre-computed laplacian matrix
         laplacianData = sio.loadmat(
@@ -178,6 +178,8 @@ def compute_laplacian(laplacianMat, points):
     lap_pts = torch.matmul(laplacianMat, points)
 
     return lap_pts
+
+
 
 if __name__=="__main__":
     import face_alignment.util.opts as opts
