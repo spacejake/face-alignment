@@ -475,6 +475,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
             pts = pts * 4 # 64->256
             heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
+            heatmaps = heatmaps.to(device)
         else:
             pts = target.pts[:,:,:2]
             heatmaps = target.heatmap256.to(device)
