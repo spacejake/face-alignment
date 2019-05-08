@@ -46,7 +46,7 @@ class W300LP(data.Dataset):
         self.g256 = None
 
     def load_extras(self):
-        self.mean, self.std = self._preprocess()
+        self.mean, self.std = self._comput_mean()
 
         # Load pre-computed laplacian matrix
         laplacianData = sio.loadmat(
