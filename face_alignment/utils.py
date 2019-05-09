@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import scipy.misc
+from skimage.filters import gaussian
 
 class InputType(Enum):
     image = 0
@@ -63,6 +64,15 @@ def draw_gaussian(image, point, sigma, g=None):
     return image, g
 
 
+def draw_gaussianv2(image, point, sigma=1.):
+    u,v = point[0],point[1]
+    image[v,u] = 1.
+    image = torch.from_numpy(gaussian(image.numpy(), sigma=sigma))
+    image = (image / (image.max() + 1e-7)) # * 30.  # 30 is purely empirical
+
+    return image
+
+
 def gen_heatmap(pts, dim=(1,68,256,256), sigma=2, g=None):
     heatmaps = torch.zeros(dim, dtype=torch.float)
     tpts = pts.clone()
@@ -73,6 +83,17 @@ def gen_heatmap(pts, dim=(1,68,256,256), sigma=2, g=None):
                 heatmaps[b, n], gauss = draw_gaussian(
                     heatmaps[b, n], tpts[b, n], sigma, g=gauss)
     return heatmaps, gauss
+
+
+def gen_heatmapv2(pts, dim=(1,68,256,256), sigma=2):
+    heatmaps = torch.zeros(dim, dtype=torch.float)
+    tpts = pts.clone()
+    for b in range(pts.size(0)):
+        for n in range(68):
+            if tpts[b, n, 0] > 0:
+                heatmaps[b, n], gauss = draw_gaussianv2(
+                    heatmaps[b, n], tpts[b, n], sigma)
+    return heatmaps
 
 def getTransform(center, scale, resolution, rotate=0):
     """Generate and affine transformation matrix.

@@ -13,7 +13,7 @@ import torch
 import torch.utils.data as data
 
 from face_alignment.datasets.common import Split, Target, compute_laplacian, SpatialSoftmax
-from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
+from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm, draw_gaussianv2
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
 
@@ -125,7 +125,11 @@ class W300LP(data.Dataset):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i], transMat256)
                 pts[i, :2] = pts[i, :2]-1
-                heatmap256[i], self.g256 = draw_gaussian(heatmap256[i], pts[i, 0:2], 2, g=self.g256)
+                heatmap256[i] = draw_gaussianv2(
+                    heatmap256[i],
+                    pts[i, 0:2].long(),
+                    sigma=2.
+                )
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -137,7 +141,12 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
-                heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=self.g64)
+                heatmap64[i] = draw_gaussianv2(
+                    heatmap64[i],
+                    tpts[i, 0:2].long() - 1,
+                    sigma=1.
+                )
+                # heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], , 1, g=self.g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         # Compute Target Laplacian vectors
@@ -182,6 +191,7 @@ def compute_laplacian(laplacianMat, points):
 
 
 if __name__=="__main__":
+    from face_alignment.datasets.common import SpatialSoftmax
     import face_alignment.util.opts as opts
 
     args = opts.argparser()
@@ -195,6 +205,8 @@ if __name__=="__main__":
         #shuffle=True,
         num_workers=1,
         pin_memory=True)
+
+    layer = SpatialSoftmax(256, 256, 68, temperature=1., unnorm=True)
     for i, data in enumerate(loader):
         input, label = data
         target = Target._make(label)
@@ -204,17 +216,20 @@ if __name__=="__main__":
         show_heatmap(target.heatmap256)
 
         # TEST 256 heatmap extraction
+        test_hmpred = layer(target.heatmap256).round().int()
+        test_hmpred = show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+
         test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0)-1)
 
         # TEST 64 heatmap extraction
         test_hmpred, _ = get_preds_fromhm(target.heatmap64, target.center, target.scale)
         test_hmpred = test_hmpred * 4 # 64->256
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0)-1)
 
         # Test other method
-        test_hmpred = get_preds(target.heatmap64) * 4
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        # test_hmpred = get_preds(target.heatmap64) * 4
+        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         plt.pause(0.5)
         plt.draw()

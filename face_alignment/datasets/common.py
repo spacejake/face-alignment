@@ -6,7 +6,6 @@ import numpy as np
 from enum import Enum
 from typing import NamedTuple
 
-from face_alignment.utils import draw_gaussian
 
 
 class Split(Enum):
@@ -53,6 +52,8 @@ class SpatialSoftmax(torch.nn.Module):
         self.register_buffer('pos_y', pos_y)
 
     def forward(self, feature):
+        feature = feature*30 # 30 is purely empirical
+
         # Output:
         #   (N, C*2) x_0 y_0 ...
         if self.data_format == 'NHWC':
@@ -71,18 +72,19 @@ class SpatialSoftmax(torch.nn.Module):
             expected_y = (expected_y * h + h) / 2.
 
         expected_xy = torch.cat([expected_x, expected_y], 1)
-        feature_keypoints = expected_xy.view(-1, self.channel * 2)
-
+        # feature_keypoints = expected_xy.view(-1, self.channel * 2)
+        feature_keypoints = expected_xy
         return feature_keypoints
 
 
 if __name__ == '__main__':
+    from face_alignment.utils import draw_gaussian, draw_gaussianv2
     from skimage.filters import gaussian
     import matplotlib.pyplot as plt
     from random import randint
 
-    n, c, h, w = 2, 16, 64, 48
-    vis = False
+    n, c, h, w = 2, 1, 64, 64
+    vis = True
 
     # Generate fake heatmap with random keypoint locations
     hm = torch.zeros((n, c, h, w))
@@ -92,7 +94,7 @@ if __name__ == '__main__':
         batch = []
         for j in range(c):
             kps = [np.random.randint(w), np.random.randint(h)]
-            hm[i, j, kps[1], kps[0]] = 1.
+            # hm[i, j, kps[1], kps[0]] = 1.
             batch.append(kps[0])
             batch.append(kps[1])
         random_keypoints.append(batch)
@@ -102,9 +104,9 @@ if __name__ == '__main__':
     random_keypoints = torch.from_numpy(random_keypoints)
     for i in range(n):
         for j in range(c):
-            hm[i, j] = torch.from_numpy(gaussian(hm[i, j].numpy(), sigma=1.))
-            # hm[i, j], _ = draw_gaussian(hm[i, j], random_keypoints[i, 2*j:2*j+2].float(), 1)
-            hm[i, j] = (hm[i, j] / (hm[i, j].max() + 1e-7)) * 30.  # 30 is purely empirical
+            # hm[i, j] = torch.from_numpy(gaussian(hm[i, j].numpy(), sigma=1.))
+            # hm[i, j] = (hm[i, j] / (hm[i, j].max() + 1e-7)) * 30.  # 30 is purely empirical
+            hm[i, j] = draw_gaussianv2(hm[i, j], random_keypoints[i, 2*j:2*j+2].long(), sigma=1.)
             if vis:
                 plt.imshow(hm[i, j])
                 plt.show()
