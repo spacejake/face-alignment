@@ -141,9 +141,10 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
+                tpts[i, 0:2] = tpts[i, 0:2]-1
                 heatmap64[i] = draw_gaussianv2(
                     heatmap64[i],
-                    tpts[i, 0:2].long() - 1,
+                    tpts[i, 0:2].long(),
                     sigma=1.
                 )
                 # heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], , 1, g=self.g64)

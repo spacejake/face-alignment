@@ -154,9 +154,10 @@ class Interpolate(nn.Module):
 
 class FAN(nn.Module):
 
-    def __init__(self, num_modules=1):
+    def __init__(self, num_modules=1, super_res=True):
         super(FAN, self).__init__()
         self.num_modules = num_modules
+        self.super_res = super_res
 
         # Base part
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
@@ -180,38 +181,40 @@ class FAN(nn.Module):
                 'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
             self.add_module('al' + str(hg_module), nn.Conv2d(68,
                                                              256, kernel_size=1, stride=1, padding=0))
-        input_skip_seq = [
-            conv3x3(3, 128),
-            nn.BatchNorm2d(128),
-        ]
-        self.input_skip = nn.Sequential(*input_skip_seq)
 
-        downsample_seq = [
-            conv3x3(256, 256),
-            nn.BatchNorm2d(256),
-        ]
-        self.downsample_layer = nn.Sequential(*downsample_seq)
+        if self.super_res:
+            input_skip_seq = [
+                conv3x3(3, 128),
+                nn.BatchNorm2d(128),
+            ]
+            self.input_skip = nn.Sequential(*input_skip_seq)
 
-        # output
-        up_sequence = [
-            ConvBlock(256, 256),
-            Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
-            conv3x3(256, 128),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
-        ]
-        self.up_layer = nn.Sequential(*up_sequence)
+            downsample_seq = [
+                conv3x3(256, 256),
+                nn.BatchNorm2d(256),
+            ]
+            self.downsample_layer = nn.Sequential(*downsample_seq)
 
-        output_sequence = [
-            conv3x3(128, 128),
-            nn.BatchNorm2d(128),
-            conv3x3(128, 128),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 68, kernel_size=1, stride=1, padding=0)
-        ]
-        self.output_layer = nn.Sequential(*output_sequence)
+            # output
+            up_sequence = [
+                ConvBlock(256, 256),
+                Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
+                conv3x3(256, 128),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
+            ]
+            self.up_layer = nn.Sequential(*up_sequence)
+
+            output_sequence = [
+                conv3x3(128, 128),
+                nn.BatchNorm2d(128),
+                conv3x3(128, 128),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, 68, kernel_size=1, stride=1, padding=0)
+            ]
+            self.output_layer = nn.Sequential(*output_sequence)
 
     def forward(self, input):
         x = F.relu(self.bn1(self.conv1(input)), True)
@@ -232,7 +235,8 @@ class FAN(nn.Module):
                         (self._modules['conv_last' + str(i)](ll)), True)
 
             # Predict heatmaps
-            tmp_out = self._modules['l' + str(i)](ll)
+            # tmp_out = self._modules['l' + str(i)](ll)
+            tmp_out = torch.sigmoid(self._modules['l' + str(i)](ll))
             outputs.append(tmp_out)
 
             ll = self._modules['bl' + str(i)](ll)
@@ -241,13 +245,17 @@ class FAN(nn.Module):
             if i < self.num_modules - 1:
                 previous = previous + ll + tmp_out_
 
-        # x = self.downsample_layer(x)
-        out = self.downsample_layer(x) + ll + tmp_out_
-        out = self.up_layer(out)
-        out = self.input_skip(input) + out
-        out = self.output_layer(out)
+        if self.super_res:
+            # x = self.downsample_layer(x)
+            out = self.downsample_layer(x) + ll + tmp_out_
+            out = self.up_layer(out)
+            out = self.input_skip(input) + out
+            out = self.output_layer(out)
 
-        return out, outputs
+            # return out, outputs
+            return torch.sigmoid(out), outputs
+
+        return outputs[-1], outputs
 
 class ResNetDepth(nn.Module):
 

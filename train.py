@@ -11,6 +11,7 @@ from skimage import io
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
@@ -23,13 +24,14 @@ from face_alignment.utils import *
 
 from face_alignment.datasets.W300LP import W300LP
 from face_alignment.datasets.AFLW2000 import AFLW2000
-from face_alignment.datasets.common import Target, compute_laplacian
+from face_alignment.datasets.common import Target, compute_laplacian, SpatialSoftmax
 
 
 from face_alignment.util.logger import Logger, savefig
 from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
-from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
+from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
+from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss
 import face_alignment.util.opts as opts
 
 model_names = sorted(
@@ -104,7 +106,7 @@ def main(args):
     # Network Models
     network_size = args.nStacks
     if train_fan:
-        face_alignment_net = FAN(num_modules=network_size)
+        face_alignment_net = FAN(num_modules=network_size, super_res=False)
     else:
         print("Training only Depth...")
         face_alignment_net = None
@@ -304,6 +306,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    lossesfan = AverageMeter()
+    losses2d = AverageMeter()
     lossesRegressor = AverageMeter()
     lossesDepth = AverageMeter()
     lossesLap = AverageMeter()
@@ -319,12 +323,26 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     # hidden = torch.autograd.Variable(torch.zeros((args.train_batch)))
 
     gt_win, pred_win = None, None
+    softArgmax2D = None
+    softArgmax2D_64 = None
+    kl_loss = nn.KLDivLoss(size_average=False)
     bar = Bar('Training', max=len(loader))
     for loader_idx, (inputs, label) in enumerate(loader):
+        batch_size = inputs.size(0)
 
         target = Target._make(label)
         data_time.update(time.time() - end)
 
+        if softArgmax2D is None:
+            heatmap_shape = target.heatmap256.shape
+            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
+            softArgmax2D = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
+
+        if softArgmax2D_64 is None:
+            heatmap_shape = target.heatmap64.shape
+            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
+            softArgmax2D_64 = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
+        
         input_var = torch.autograd.Variable(inputs.to(device))
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
         target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
@@ -332,6 +350,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
+        lossfan =  torch.zeros([1], dtype=torch.float32)[0]
+        loss2D =  torch.zeros([1], dtype=torch.float32)[0]
         if train_fan:
             # Forward
             out_hm, output = model.FAN(input_var)
@@ -343,24 +363,44 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             # Supervision
             # Intermediate supervision
             loss = 0
+            # lossFan = 0
+            # loss2D = 0
+            target_pts64 = softArgmax2D_64(target_hm64).detach()
             for o in output:
-                loss += criterion.hm(o, target_hm64)
+                loss += js_loss(o, target_hm64)
+                #lossfan += criterion.hm(o, target_hm64)
+                pts = softArgmax2D_64(o)
+                loss += euclidean_losses(pts, target_pts64) #criterion.hm(pts, target_pts64)
 
-            #Final Loss
-            loss += criterion.hm(out_hm, target_hm256)
+            if model.FAN.super_res:
+                #Final Loss, weight higher due to more sparse Heatmap @ 256
+                loss += js_loss(out_hm, target_hm256)
+
+                # Non-differentiable
+                # pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
+                # pts = pts.to(device)
+
+                # differentiable
+                pts = softArgmax2D(out_hm)
+                loss += euclidean_losses(pts, target_pts[:,:,:2]) #criterion.hm(pts, target_pts[:,:,:2])
+
+                # combine terms
+                #loss = lossfan.mean()
+            else:
+                pts = pts * 4
+
+            loss = loss.mean()
 
             # Back-prop
             optimizer.FAN.zero_grad()
             loss.backward()
             optimizer.FAN.step()
         else:
-            out_hm = target.heatmap256
-
-        if train_fan:
-            pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-            pts = pts * 4 # 64->256
-        else:
-            pts = target.pts[:,:,:2]
+            if model.FAN.super_res:
+                out_hm = target.heatmap256
+            else:
+                out_hm = target.heatmap64
+            pts = target_pts[:,:,:2]
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
@@ -384,37 +424,37 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
             lossRegressor = lossDepth + 0.5 * lossLap
 
-            depth_pred = depth_pred.cpu()
-
             # Back-prop
             optimizer.Depth.zero_grad()
             lossRegressor.backward()
             optimizer.Depth.step()
 
-            pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2)
+            pts_img = torch.cat((pts, depth_pred.unsqueeze(2)), 2).cpu()
         else:
-            pts_img = torch.cat((pts, target.pts[:,:,2].unsqueeze(2)), 2)
+            pts_img = torch.cat((pts, target_pts[:,:,2].unsqueeze(2)), 2).cpu()
 
         acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
-        losses.update(loss.data, inputs.size(0))
+        losses.update(loss.data, batch_size)
+        lossesfan.update(lossfan.data, batch_size)
+        losses2d.update(loss2D.data, batch_size)
         #lossRegressor = lossDepth + lossLap
-        lossesRegressor.update(lossRegressor.data, inputs.size(0))
-        lossesDepth.update(lossDepth.data, inputs.size(0))
-        lossesLap.update(lossLap.data, inputs.size(0))
-        acces.update(acc[0], inputs.size(0))
+        lossesRegressor.update(lossRegressor.data, batch_size)
+        lossesDepth.update(lossDepth.data, batch_size)
+        lossesLap.update(lossLap.data, batch_size)
+        acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
 
-            show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
-            sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
 
             if train_fan:
                 show_heatmap(out_hm.cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256.png"))
-                show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm256_gt.png"))
+
+                show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm64_gt.png"))
+                show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"hm64.png"))
                 sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
                 io.imsave(os.path.join(args.checkpoint,"input-with-hm64.png"),sample_hm)
                 sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
@@ -423,7 +463,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         batch_time.update(time.time() - end)
         end = time.time()
         bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
-                     'Loss: {loss:.4f} | ' \
+                     'Loss: {loss:.4f} | lossFAN: {lossfan:.4f} | loss2D: {loss2d:.4f} |' \
                      'LossRegressor: {lossReg:.4f} | lossDepth: {lossDepth:.4f} | lossLaplacian: {lossLap:.4f} | ' \
                      'Acc: {acc: .4f}'.format(
             batch=loader_idx + 1,
@@ -433,6 +473,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             total=bar.elapsed_td,
             eta=bar.eta_td,
             loss=losses.avg,
+            lossfan=lossesfan.avg,
+            loss2d=losses2d.avg,
             lossReg=lossesRegressor.avg,
             lossDepth=lossesDepth.avg,
             lossLap=lossesLap.avg,
@@ -462,10 +504,16 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     gt_win, pred_win = None, None
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
-    gauss_256 = None
+    softArgmax2D = None
     for val_idx, (inputs, label, meta) in enumerate(loader):
+        batch_size = inputs.size(0)
         target = Target._make(label)
         data_time.update(time.time() - end)
+
+        if softArgmax2D is None:
+            heatmap_shape = target.heatmap256.shape
+            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
+            softArgmax2D = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_var = target.heatmap64.to(device)
@@ -484,17 +532,33 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             for o in output:
                 loss += criterion.hm(o, target_var)
 
-            loss += criterion.hm(out_hm, target_var256)
-        else:
-            output = target.heatmap64.unsqueeze(0)
-            out_hm = target.heatmap256
+            if model.FAN.super_res:
+                loss += criterion.hm(out_hm, target_var256)
 
-        if val_fan:
-            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
-            heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
-            heatmaps = heatmaps.to(device)
+            # Non-differentiable
+            # pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
+
+            # differentiable
+            pts = softArgmax2D(out_hm)
+
+            if not model.FAN.super_res:
+                pts = pts * 4
+
+            loss += criterion.hm(pts, target_pts[:,:,:2])
         else:
-            pts = target.pts[:,:,:2]
+            pts = target_pts[:,:,:2]
+            output = target.heatmap64.unsqueeze(0)
+
+            if model.FAN.super_res:
+                out_hm = target.heatmap256
+            else:
+                out_hm = target.heatmap64
+
+
+        if val_fan and val_depth:
+            heatmaps = gen_heatmapv2(pts, dim=(pts.size(0), 68, w, h), sigma=2)
+            heatmaps = heatmaps.to(device)
+        elif val_depth:
             heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
@@ -506,10 +570,9 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             # intermediate supervision
             lossDepth = criterion.pts(depth_pred, target_pts[:,:,2])
 
-            depth_pred = depth_pred.cpu()
-            pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
+            pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2).cpu()
         else:
-            pts_img = torch.cat((pts.data, target.pts[:,:,2].unsqueeze(2)), 2)
+            pts_img = torch.cat((pts.data, target_pts[:,:,2].unsqueeze(2)), 2).cpu()
 
         if val_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
@@ -518,8 +581,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             if val_fan:
                 show_heatmap(output[-1].cpu().data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
                 show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
-                show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
-                show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
+
+                if model.FAN.super_res:
+                    show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
+                    show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
 
                 sample_hm = sample_with_heatmap(inputs[0], output[-1][0].detach())
                 io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
@@ -529,12 +594,12 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
-        for n in range(inputs.size(0)):
+        for n in range(batch_size):
             predictions[meta['index'][n], :, :] = pts_img[n, :, :]
 
-        losses.update(loss.data, inputs.size(0))
-        losseslmk.update(lossDepth.data, inputs.size(0))
-        acces.update(acc[0], inputs.size(0))
+        losses.update(loss.data, batch_size)
+        losseslmk.update(lossDepth.data, batch_size)
+        acces.update(acc[0], batch_size)
 
         batch_time.update(time.time() - end)
         end = time.time()

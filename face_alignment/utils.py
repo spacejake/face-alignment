@@ -66,6 +66,9 @@ def draw_gaussian(image, point, sigma, g=None):
 
 def draw_gaussianv2(image, point, sigma=1.):
     u,v = point[0],point[1]
+    if u >= image.shape[0] or v >= image.shape[1] or u < 0 or v < 0:
+        return image
+
     image[v,u] = 1.
     image = torch.from_numpy(gaussian(image.numpy(), sigma=sigma))
     image = (image / (image.max() + 1e-7)) # * 30.  # 30 is purely empirical

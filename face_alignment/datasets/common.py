@@ -40,7 +40,7 @@ class SpatialSoftmax(torch.nn.Module):
         if temperature:
             self.temperature = Parameter(torch.ones(1) * temperature)
         else:
-            self.temperature = 1.
+            self.temperature = Parameter(torch.ones(1))
 
         pos_x, pos_y = np.meshgrid(
             np.linspace(-1., 1., self.width),
@@ -72,8 +72,8 @@ class SpatialSoftmax(torch.nn.Module):
             expected_y = (expected_y * h + h) / 2.
 
         expected_xy = torch.cat([expected_x, expected_y], 1)
-        # feature_keypoints = expected_xy.view(-1, self.channel * 2)
-        feature_keypoints = expected_xy
+        feature_keypoints = expected_xy.view(-1, self.channel, 2)
+
         return feature_keypoints
 
 
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from random import randint
 
-    n, c, h, w = 2, 1, 64, 64
+    n, c, h, w = 2, 1, 256, 256
     vis = True
 
     # Generate fake heatmap with random keypoint locations
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         for j in range(c):
             # hm[i, j] = torch.from_numpy(gaussian(hm[i, j].numpy(), sigma=1.))
             # hm[i, j] = (hm[i, j] / (hm[i, j].max() + 1e-7)) * 30.  # 30 is purely empirical
-            hm[i, j] = draw_gaussianv2(hm[i, j], random_keypoints[i, 2*j:2*j+2].long(), sigma=1.)
+            hm[i, j] = draw_gaussianv2(hm[i, j], random_keypoints[i, 2*j:2*j+2].long(), sigma=2.)
             if vis:
                 plt.imshow(hm[i, j])
                 plt.show()
