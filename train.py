@@ -505,6 +505,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
     softArgmax2D = None
+    softArgmax2D_64 = None
     for val_idx, (inputs, label, meta) in enumerate(loader):
         batch_size = inputs.size(0)
         target = Target._make(label)
@@ -514,6 +515,12 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             heatmap_shape = target.heatmap256.shape
             n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
             softArgmax2D = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
+
+
+        if softArgmax2D_64 is None:
+            heatmap_shape = target.heatmap64.shape
+            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
+            softArgmax2D_64 = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_var = target.heatmap64.to(device)
@@ -535,13 +542,14 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             if model.FAN.super_res:
                 loss += criterion.hm(out_hm, target_var256)
 
-            # Non-differentiable
-            # pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
 
-            # differentiable
-            pts = softArgmax2D(out_hm)
+                # Non-differentiable
+                # pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
 
-            if not model.FAN.super_res:
+                # differentiable
+                pts = softArgmax2D(out_hm)
+            else:
+                pts = softArgmax2D_64(out_hm)
                 pts = pts * 4
 
             loss += criterion.hm(pts, target_pts[:,:,:2])
