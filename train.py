@@ -337,11 +337,13 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
         target_pts64 = torch.autograd.Variable(target.pts64.to(device))
         target_pts = torch.autograd.Variable(target.pts.to(device))
+        target_lap = torch.autograd.Variable(target.lap_pts.to(device))
+        laplacian_mat = laplacian_mat.to(device)
 
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
-        lossfan =  torch.zeros([1], dtype=torch.float32)[0]
-        loss2D =  torch.zeros([1], dtype=torch.float32)[0]
+        lossfan = torch.zeros([1], dtype=torch.float32)[0]
+        loss2D = torch.zeros([1], dtype=torch.float32)[0]
         if train_fan:
             # Forward
             out_hm, output = model.FAN(input_var)
@@ -355,11 +357,18 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             loss = 0
             # lossFan = 0
             # loss2D = 0
+
+            target_lap64 = compute_laplacian(laplacian_mat, target_pts64)
             for o in output:
                 loss += js_loss(o, target_hm64)
                 #lossfan += criterion.hm(o, target_hm64)
                 pts = heatmaps_to_coords(o)
                 loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
+
+                # Laplacian
+                pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
+                pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
+                loss += 0.5 * euclidean_losses(pred_lap, target_lap64)
 
             if model.FAN.super_res:
                 #Final Loss, weight higher due to more sparse Heatmap @ 256
@@ -373,10 +382,16 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 pts = heatmaps_to_coords(out_hm)
                 loss += euclidean_losses(pts, target_pts[:,:,:2]) #criterion.hm(pts, target_pts[:,:,:2])
 
+                # Laplacian
+                pred_pts256 = torch.cat((pts, target_pts[:, :, 2:]), 2)
+                pred_lap = compute_laplacian(laplacian_mat, pred_pts256)
+                loss += 0.5 * euclidean_losses(pred_lap, target_lap)
+
                 # combine terms
                 #loss = lossfan.mean()
             else:
                 pts = pts * 4
+
 
             loss = loss.mean()
 
@@ -426,7 +441,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         losses.update(loss.data, batch_size)
         lossesfan.update(lossfan.data, batch_size)
-        losses2d.update(loss2D.data, batch_size)
+        losses2d.update(loss2D.mean().data, batch_size)
         #lossRegressor = lossDepth + lossLap
         lossesRegressor.update(lossRegressor.data, batch_size)
         lossesDepth.update(lossDepth.data, batch_size)
