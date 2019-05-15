@@ -168,22 +168,20 @@ def make_gauss(means, size, sigma, normalize=True):
     """
 
     # Normalize Means, Assume all sizes is greater than 1
-    norm_means = None
-    for n, mean in zip(size, means.split(1, -1)):
-        mean = mean / (n - 1)
-        if norm_means is None:
-            norm_means = mean
-        else:
-            norm_means = torch.cat((norm_means, mean), -1)
+    norm_means = means.clone().detach()
+    for n, mean in zip(size, norm_means.split(1, -1)):
+        mean /= (n - 1)
+
+    norm_means = norm_means * 2 - 1
 
     dim_range = range(-1, -(len(size) + 1), -1)
-    coords_list = [_normalized_linspace(s, dtype=means.dtype, device=means.device)
+    coords_list = [_normalized_linspace(s, dtype=norm_means.dtype, device=norm_means.device)
                    for s in reversed(size)]
 
     # PDF = exp(-(x - \mu)^2 / (2 \sigma^2))
 
     # dists <- (x - \mu)^2
-    dists = [(x - mean) ** 2 for x, mean in zip(coords_list, means.split(1, -1))]
+    dists = [(x - norm_mean) ** 2 for x, norm_mean in zip(coords_list, norm_means.split(1, -1))]
 
     # ks <- -1 / (2 \sigma^2)
     stddevs = [2 * sigma / s for s in reversed(size)]
@@ -246,12 +244,18 @@ def js_reg_losses(heatmaps, mu_t, sigma_t):
     return _divergence_reg_losses(heatmaps, mu_t, sigma_t, _js).mean(dim=1)
 
 
-def heatmaps_to_coords(heatmaps):
+def heatmaps_to_coords(heatmaps, normalize=False):
     xy = dsnt(heatmaps)
     x, y = xy.split(1, -1)
     coords = torch.cat([x, y], -1)
-    dim_range = range(-1, 1 - heatmaps.dim(), -1)
-    coords = [(coord / (n-1)) for n, coord in zip(dim_range, coords.split(1, -1))]
+
+    # Denormalize
+    if not normalize:
+        coords = (coords + 1) / 2
+        dim = heatmaps.shape[-2:]
+        for n, coord in zip(dim, coords.split(1, -1)):
+            coord *= (n - 1)
+
     return coords
 
 
@@ -262,40 +266,24 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from random import randint
 
-    n, c, h, w = 2, 2, 64, 64
+    n, c, h, w = 2, 2, 256, 256
     vis = True
 
     # Generate fake heatmap with random keypoint locations
-    # hm = torch.zeros((n, c, h, w))
-
-    # xy_hm = make_gauss(torch.Tensor([[[-0.5, 0.5],[-0.1, 0.1]]]), (h,w), 1., normalize=True)
-    #
-    # plt.imshow(xy_hm[0,0])
-    # plt.show()
-
     random_keypoints = []
     for i in range(n):
         batch = []
         for j in range(c):
-            kps = [np.random.randint(w), np.random.randint(h)]
+            kps = [np.random.uniform(0,w), np.random.uniform(0,h)]
             # hm[i, j, kps[1], kps[0]] = 1.
             batch.append([kps[0],kps[1]])
         random_keypoints.append(batch)
 
     # Put gaussian to peaks
     random_keypoints = np.array(random_keypoints)
-    random_keypoints = torch.from_numpy(random_keypoints).float()
+    random_keypoints = torch.from_numpy(random_keypoints)
 
-    hm = make_gauss(random_keypoints, (h, w), sigma=1., normalize=True)
-    # for i in range(n):
-    #     for j in range(c):
-    #         hm[i, j] = make_gauss(random_keypoints[i, 2*j:2*j+2]/63, (h, w), sigma=1., normalize=True)
-    #         # hm[i, j] = torch.from_numpy(gaussian(hm[i, j].numpy(), sigma=1.))
-    #         # hm[i, j] = (hm[i, j] / (hm[i, j].max() + 1e-7)) * 30.  # 30 is purely empirical
-    #         # hm[i, j] = draw_gaussianv2(hm[i, j], random_keypoints[i, 2*j:2*j+2].long(), sigma=1.)
-    #         if vis:
-    #             plt.imshow(hm[i, j])
-    #             plt.show()
+    hm = make_gauss(random_keypoints, (h, w), sigma=2., normalize=True)
 
     if vis:
         for i in range(n):
@@ -303,8 +291,8 @@ if __name__ == '__main__':
                 plt.imshow(hm[i, j])
                 plt.show()
 
-    keypoints = heatmaps_to_coords(hm).round().int()
-    random_keypoints = random_keypoints.int()
+    keypoints = heatmaps_to_coords(hm, normalize=False)
+    random_keypoints = random_keypoints
 
     print('Original kps: %s' % random_keypoints)
     print('Estimated kps: %s' % keypoints)

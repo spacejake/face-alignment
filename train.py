@@ -33,6 +33,7 @@ from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss
 import face_alignment.util.opts as opts
+from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
 
 model_names = sorted(
     name for name in models.__dict__
@@ -323,8 +324,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
     # hidden = torch.autograd.Variable(torch.zeros((args.train_batch)))
 
     gt_win, pred_win = None, None
-    softArgmax2D = None
-    softArgmax2D_64 = None
     kl_loss = nn.KLDivLoss(size_average=False)
     bar = Bar('Training', max=len(loader))
     for loader_idx, (inputs, label) in enumerate(loader):
@@ -332,16 +331,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         target = Target._make(label)
         data_time.update(time.time() - end)
-
-        if softArgmax2D is None:
-            heatmap_shape = target.heatmap256.shape
-            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
-            softArgmax2D = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
-
-        if softArgmax2D_64 is None:
-            heatmap_shape = target.heatmap64.shape
-            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
-            softArgmax2D_64 = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
         
         input_var = torch.autograd.Variable(inputs.to(device))
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
@@ -365,11 +354,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             loss = 0
             # lossFan = 0
             # loss2D = 0
-            target_pts64 = softArgmax2D_64(target_hm64).detach()
+            target_pts64 = heatmaps_to_coords(target_hm64).detach()
             for o in output:
                 loss += js_loss(o, target_hm64)
                 #lossfan += criterion.hm(o, target_hm64)
-                pts = softArgmax2D_64(o)
+                pts = heatmaps_to_coords(o)
                 loss += euclidean_losses(pts, target_pts64) #criterion.hm(pts, target_pts64)
 
             if model.FAN.super_res:
@@ -381,7 +370,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 # pts = pts.to(device)
 
                 # differentiable
-                pts = softArgmax2D(out_hm)
+                pts = heatmaps_to_coords(out_hm)
                 loss += euclidean_losses(pts, target_pts[:,:,:2]) #criterion.hm(pts, target_pts[:,:,:2])
 
                 # combine terms
@@ -504,23 +493,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
     gt_win, pred_win = None, None
     bar = Bar('Validating', max=len(loader))
     all_dists = torch.zeros((68, loader.dataset.__len__()))
-    softArgmax2D = None
-    softArgmax2D_64 = None
     for val_idx, (inputs, label, meta) in enumerate(loader):
         batch_size = inputs.size(0)
         target = Target._make(label)
         data_time.update(time.time() - end)
-
-        if softArgmax2D is None:
-            heatmap_shape = target.heatmap256.shape
-            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
-            softArgmax2D = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
-
-
-        if softArgmax2D_64 is None:
-            heatmap_shape = target.heatmap64.shape
-            n, w, h = heatmap_shape[1],heatmap_shape[2],heatmap_shape[3]
-            softArgmax2D_64 = SpatialSoftmax(w, h, n, temperature=1., unnorm=True).to(device)
 
         input_var = torch.autograd.Variable(inputs.to(device))
         target_var = target.heatmap64.to(device)
@@ -547,9 +523,9 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                 # pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
 
                 # differentiable
-                pts = softArgmax2D(out_hm)
-            else:
-                pts = softArgmax2D_64(out_hm)
+            pts = heatmaps_to_coords(out_hm)
+
+            if not model.FAN.super_res:
                 pts = pts * 4
 
             loss += criterion.hm(pts, target_pts[:,:,:2])
@@ -564,7 +540,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
 
         if val_fan and val_depth:
-            heatmaps = gen_heatmapv2(pts, dim=(pts.size(0), 68, w, h), sigma=2)
+            heatmaps = make_gauss(pts, (256, 256), sigma=2)
             heatmaps = heatmaps.to(device)
         elif val_depth:
             heatmaps = target.heatmap256.to(device)

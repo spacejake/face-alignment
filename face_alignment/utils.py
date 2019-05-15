@@ -175,7 +175,7 @@ def transform(point, transform, invert=False):
     #Hnormalize
     new_point = torch.div(new_point[0:dim], new_point[-1])
 
-    new_point[0:2] = new_point[0:2].int() + 1
+    new_point[0:2] = new_point[0:2]#.int() + 1
 
     return new_point
 
@@ -230,10 +230,10 @@ def crop(image, center, scale, resolution=256.0, rotate=0):
     """  # Crop around the center point
     """ Crops the image around the center. Input is expected to be an np.ndarray """
     transul = getTransform(center, scale, resolution)
-    ul = transform([1, 1], transul, True)
+    ul = transform([1, 1], transul, True).int()
 
     transbr = getTransform(center, scale, resolution)
-    br = transform([resolution, resolution], transbr, True)
+    br = transform([resolution, resolution], transbr, True).int()
     # ul = transform([1, 1], center, scale, resolution, True)
     # br = transform([resolution, resolution], center, scale, resolution, True)
 
@@ -329,7 +329,7 @@ def get_preds_fromhm(hm, center=None, scale=None):
             transMat = getTransform(center[b], scale[b], hm.size(2))
             for i in range(hm.size(0)):
                 for j in range(hm.size(1)):
-                    preds_orig[i, j] = transform(preds[i, j], transMat, True)
+                    preds_orig[i, j] = transform(preds[i, j], transMat, True).int()
 
     return preds, preds_orig
 

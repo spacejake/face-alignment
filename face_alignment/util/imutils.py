@@ -105,6 +105,7 @@ def gauss(x, a, b, c, d=0):
 
 def color_heatmap(x):
     x = to_numpy(x)
+    # x /= np.max(x)
     color = np.zeros((x.shape[0],x.shape[1],3))
     color[:,:,0] = gauss(x, .5, .6, .2) + gauss(x, 1, .8, .3)
     color[:,:,1] = gauss(x, 1, .5, .3)
@@ -150,7 +151,7 @@ def show_heatmap(target, outname="heatmap.png"):
     for n in range(num_sample):
         out = torch.zeros(width, height)
         for p in range(num_joints):
-            out += target[n,p,:,:]
+            out += target[n,p,:,:] / torch.max(target[n,p,:,:])
 
         plt.imshow(color_heatmap(out))
         plt.show()

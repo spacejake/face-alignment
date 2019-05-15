@@ -16,6 +16,7 @@ from face_alignment.datasets.common import Split, Target, compute_laplacian, Spa
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm, draw_gaussianv2
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
+from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -115,6 +116,8 @@ class W300LP(data.Dataset):
             img[1, :, :].mul_(random.uniform(0.7, 1.3)).clamp_(0, 1)
             img[2, :, :].mul_(random.uniform(0.7, 1.3)).clamp_(0, 1)
 
+        # show_joints(img, raw_pts)
+
         inp = im_to_torch(crop(im_to_numpy(img), c, s, 256, rotate=r))
         # Transform Points
         # 256x256 GT Heatmap and Points
@@ -124,12 +127,13 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if pts[i, 0] > 0:
                 pts[i] = transform(pts[i], transMat256)
-                pts[i, :2] = pts[i, :2]-1
-                heatmap256[i] = draw_gaussianv2(
-                    heatmap256[i],
-                    pts[i, 0:2].long(),
-                    sigma=2.
-                )
+                # pts[i, :2] = pts[i, :2]-2
+                heatmap256[i] = make_gauss(pts[i, 0:2], (256, 256), sigma=2., normalize=True)
+                # heatmap256[i] = draw_gaussianv2(
+                #     heatmap256[i],
+                #     pts[i, 0:2].long(),
+                #     sigma=2.
+                # )
                 # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
 
         # inp = color_normalize(inp, self.mean, self.std)
@@ -141,12 +145,13 @@ class W300LP(data.Dataset):
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
-                tpts[i, 0:2] = tpts[i, 0:2]-1
-                heatmap64[i] = draw_gaussianv2(
-                    heatmap64[i],
-                    tpts[i, 0:2].long(),
-                    sigma=1.
-                )
+                # tpts[i, 0:2] = tpts[i, 0:2]-1
+                heatmap64[i] = make_gauss(tpts[i, 0:2], (64, 64), sigma=1., normalize=True)
+                # heatmap64[i] = draw_gaussianv2(
+                #     heatmap64[i],
+                #     tpts[i, 0:2].long(),
+                #     sigma=1.
+                # )
                 # heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], , 1, g=self.g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
@@ -216,21 +221,15 @@ if __name__=="__main__":
         show_heatmap(target.heatmap64)
         show_heatmap(target.heatmap256)
 
-        # TEST 256 heatmap extraction
-        test_hmpred = layer(target.heatmap256).round().int()
-        test_hmpred = show_joints(input.squeeze(0), test_hmpred.squeeze(0))
-
-        test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0)-1)
+        test_hmpred = heatmaps_to_coords(target.heatmap256)
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        # sample_hm = sample_with_heatmap(input.squeeze(0), target.heatmap64.squeeze(0))
+        # plt.imshow(sample_hm)
 
         # TEST 64 heatmap extraction
-        test_hmpred, _ = get_preds_fromhm(target.heatmap64, target.center, target.scale)
+        test_hmpred = heatmaps_to_coords(target.heatmap64)
         test_hmpred = test_hmpred * 4 # 64->256
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0)-1)
-
-        # Test other method
-        # test_hmpred = get_preds(target.heatmap64) * 4
-        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         plt.pause(0.5)
         plt.draw()
