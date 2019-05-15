@@ -335,6 +335,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         input_var = torch.autograd.Variable(inputs.to(device))
         target_hm64 = torch.autograd.Variable(target.heatmap64.to(device))
         target_hm256 = torch.autograd.Variable(target.heatmap256.to(device))
+        target_pts64 = torch.autograd.Variable(target.pts64.to(device))
         target_pts = torch.autograd.Variable(target.pts.to(device))
 
         # FAN
@@ -354,12 +355,11 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             loss = 0
             # lossFan = 0
             # loss2D = 0
-            target_pts64 = heatmaps_to_coords(target_hm64).detach()
             for o in output:
                 loss += js_loss(o, target_hm64)
                 #lossfan += criterion.hm(o, target_hm64)
                 pts = heatmaps_to_coords(o)
-                loss += euclidean_losses(pts, target_pts64) #criterion.hm(pts, target_pts64)
+                loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
 
             if model.FAN.super_res:
                 #Final Loss, weight higher due to more sparse Heatmap @ 256

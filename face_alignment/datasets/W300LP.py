@@ -78,8 +78,8 @@ class W300LP(data.Dataset):
         return self.total
 
     def __getitem__(self, index):
-        inp, heatmap64, heatmap256, pts, lap_pts, center, scale = self.generateSampleFace(index)
-        target = Target(heatmap64, heatmap256, pts, lap_pts, center, scale)
+        inp, heatmap64, heatmap256, pts, pts64, lap_pts, center, scale = self.generateSampleFace(index)
+        target = Target(heatmap64, heatmap256, pts, pts64, lap_pts, center, scale)
         if self.is_train:
             return inp, target
         else:
@@ -125,8 +125,8 @@ class W300LP(data.Dataset):
         heatmap256 = torch.zeros(self.nParts, 256, 256)
         transMat256 = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
+            pts[i] = transform(pts[i], transMat256)
             if pts[i, 0] > 0:
-                pts[i] = transform(pts[i], transMat256)
                 # pts[i, :2] = pts[i, :2]-2
                 heatmap256[i] = make_gauss(pts[i, 0:2], (256, 256), sigma=2., normalize=True)
                 # heatmap256[i] = draw_gaussianv2(
@@ -139,26 +139,26 @@ class W300LP(data.Dataset):
         # inp = color_normalize(inp, self.mean, self.std)
 
         # 64x64 Intermediate Heatmap
-        tpts = raw_pts.clone()
+        pts64 = raw_pts.clone()
         heatmap64 = torch.zeros(self.nParts, 64, 64)
         transMat64 = getTransform(c, s, 64, rotate=r)
         for i in range(self.nParts):
-            if tpts[i, 0] > 0:
-                tpts[i] = transform(tpts[i], transMat64)
-                # tpts[i, 0:2] = tpts[i, 0:2]-1
-                heatmap64[i] = make_gauss(tpts[i, 0:2], (64, 64), sigma=1., normalize=True)
+            pts64[i] = transform(pts64[i], transMat64)
+            if pts64[i, 0] > 0:
+                # pts64[i, 0:2] = pts64[i, 0:2]-1
+                heatmap64[i] = make_gauss(pts64[i, 0:2], (64, 64), sigma=1., normalize=True)
                 # heatmap64[i] = draw_gaussianv2(
                 #     heatmap64[i],
-                #     tpts[i, 0:2].long(),
+                #     pts64[i, 0:2].long(),
                 #     sigma=1.
                 # )
                 # heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], , 1, g=self.g64)
-                # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
+                # heatmap64[i] = draw_labelmap(heatmap64[i], pts64[i] - 1, sigma=1)
 
         # Compute Target Laplacian vectors
         lap_pts = compute_laplacian(self.laplcian, pts)
 
-        return inp, heatmap64, heatmap256, pts, lap_pts, c, s
+        return inp, heatmap64, heatmap256, pts, pts64, lap_pts, c, s
 
     def _comput_mean(self):
         meanstd_file = os.path.join(self.img_dir, 'mean.pth.tar')
