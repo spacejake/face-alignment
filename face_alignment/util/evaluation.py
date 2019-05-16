@@ -53,7 +53,7 @@ def dist_acc(dists, thr=0.5):
         return -1
 
 
-def calc_metrics(dists, path='', category='', method=''):
+def calc_metrics(dists, path='', category='', method='', line='b-'):
     errors = torch.mean(dists, 0).view(dists.size(1))
     axes1 = np.linspace(0, 1, 1000)
     axes2 = np.zeros(1000)
@@ -83,7 +83,7 @@ def calc_metrics(dists, path='', category='', method=''):
             if category in ['Hard', 'Category C']:
                 plt.plot(axes1 * 100, axes2 * 100, 'g-', label=label, lw=3)
         else:
-            plt.plot(axes1 * 100, axes2 * 100, 'b-', label=label, lw=3)
+            plt.plot(axes1 * 100, axes2 * 100, line, label=label, lw=3)
         plt.legend(loc=4, fontsize=12)
 
         plt.savefig(os.path.join(path + '/CED.eps'))

@@ -46,14 +46,14 @@ class AFLW2000(W300LP):
 
         main_pts = sio.loadmat(self.anno[idx])
         raw_pts = main_pts['pt3d_68'][0:3, :].transpose()
-        raw_pts = torch.from_numpy(raw_pts)
+        raw_pts = torch.from_numpy(raw_pts).float()
         mins_ = torch.min(raw_pts, 0)[0].view(3) # min vals
         maxs_ = torch.max(raw_pts, 0)[0].view(3) # max vals
         c = torch.FloatTensor((maxs_[0]-(maxs_[0]-mins_[0])/2, maxs_[1]-(maxs_[1]-mins_[1])/2))
         c[1] -= ((maxs_[1]-mins_[1]) * 0.12).float()
         s = (maxs_[0]-mins_[0]+maxs_[1]-mins_[1])/195
-
-        img = load_image(self.anno[idx][:-4] + '.jpg')
+        s = s.float()
+        img = load_image(self.anno[idx][:-4] + '.jpg').float()
 
         return self.genData(img, raw_pts, c, s, sf, rf)
 

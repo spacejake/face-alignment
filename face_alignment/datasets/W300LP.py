@@ -216,34 +216,34 @@ if __name__=="__main__":
         # show_heatmap(target.heatmap256)
         #
         test_hmpred = heatmaps_to_coords(target.heatmap256)
+
+        acc256, batch_dists256 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
+        all_dists256[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists256
+
         # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
         #
         # # sample_hm = sample_with_heatmap(input.squeeze(0), target.heatmap64.squeeze(0))
         # # plt.imshow(sample_hm)
-        #
+
         # # TEST 64 heatmap extraction
         test_hmpred = heatmaps_to_coords(target.heatmap64)
         test_hmpred = test_hmpred * 4 # 64->256
+        acc64, batch_dists64 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
+        all_dists64[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists64
+
         # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         # plt.pause(0.5)
         # plt.draw()
 
-        acc256, batch_dists256 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
-        all_dists256[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists256
-
-        acc64, batch_dists64 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
-        all_dists64[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists64
-
-
     mean_error256 = torch.mean(all_dists256)
     mean_error64 = torch.mean(all_dists64)
 
     auc256 = calc_metrics(all_dists256, path=args.checkpoint, category='300W-Testset-256',
-                          method='Ours')  # this is auc of predicted maps and target.
+                          method='SoftArgmax 256')  # this is auc of predicted maps and target.
     auc64 = calc_metrics(all_dists64, path=args.checkpoint, category='300W-Testset-64',
-                         method='Ours')  # this is auc of predicted maps and target.
+                         method='SoftArgmax 64', line='g-')  # this is auc of predicted maps and target.
 
-    print("=> Mean Error (256): {:.6f}, AUC@0.07: {} based on maps".format(mean_error256 * 100., auc256))
-    print("=> Mean Error (64): {:.6f}, AUC@0.07: {} based on maps".format(mean_error64 * 100., auc64))
+    print("=> Mean Error (256): {}, AUC@0.07: {} based on maps".format(mean_error256 * 100., auc256))
+    print("=> Mean Error (64): {}, AUC@0.07: {} based on maps".format(mean_error64 * 100., auc64))
 
