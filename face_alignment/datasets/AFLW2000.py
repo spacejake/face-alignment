@@ -13,6 +13,7 @@ import torch.utils.data as data
 from face_alignment.datasets.common import Split, Target, compute_laplacian
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
 from face_alignment.util.imutils import *
+from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
 
 
 from face_alignment.datasets.W300LP import W300LP
@@ -27,6 +28,7 @@ class AFLW2000(W300LP):
 
     def load_extras(self):
         # Don't load extras, will only use this dataset for Validation, for now...
+        self.laplcian = None
         pass
 
     def _getDataFaces(self, is_train):
@@ -53,50 +55,7 @@ class AFLW2000(W300LP):
 
         img = load_image(self.anno[idx][:-4] + '.jpg')
 
-        r = 0
-        if self.is_train:
-            s = s * torch.randn(1).mul_(sf).add_(1).clamp(1 - sf, 1 + sf)[0]
-            r = torch.randn(1).mul_(rf).clamp(-2 * rf, 2 * rf)[0] if random.random() <= 0.6 else 0
-
-            if random.random() <= 0.5:
-                img = flip(img).float()
-                raw_pts = shuffle_lr(raw_pts, width=img.size(2))
-                c[0] = img.size(2) - c[0]
-
-            img[0, :, :].mul_(random.uniform(0.7, 1.3)).clamp_(0, 1)
-            img[1, :, :].mul_(random.uniform(0.7, 1.3)).clamp_(0, 1)
-            img[2, :, :].mul_(random.uniform(0.7, 1.3)).clamp_(0, 1)
-
-        inp = im_to_torch(crop(im_to_numpy(img), c, s, 256, rotate=r))
-        # Transform Points
-        # 256x256 GT Heatmap and Points
-        pts = raw_pts.clone()
-        heatmap256 = torch.zeros(self.nParts, 256, 256)
-        transMat256 = getTransform(c, s, 256, rotate=r)
-        for i in range(self.nParts):
-            if pts[i, 0] > 0:
-                pts[i] = transform(pts[i], transMat256)
-                pts[i, :2] = pts[i, :2]-1
-                heatmap256[i], self.g256 = draw_gaussian(heatmap256[i], pts[i, 0:2], 2, g=self.g256)
-                # heatmap256[i] = draw_labelmap(heatmap256[i], pts[i], sigma=3)
-
-        # inp = color_normalize(inp, self.mean, self.std)
-
-        # 64x64 Intermediate Heatmap
-        tpts = raw_pts.clone()
-        heatmap64 = torch.zeros(self.nParts, 64, 64)
-        transMat64 = getTransform(c, s, 64, rotate=r)
-        for i in range(self.nParts):
-            if tpts[i, 0] > 0:
-                tpts[i] = transform(tpts[i], transMat64)
-                heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=self.g64)
-                # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
-
-        # Compute Target Laplacian vectors
-        # lap_pts = compute_laplacian(self.laplcian, pts)
-
-        #return inp, heatmap64, heatmap256, pts, lap_pts, c, s
-        return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), c.float(), s.float()
+        return self.genData(img, raw_pts, c, s, sf, rf)
 
 
 if __name__=="__main__":
@@ -121,11 +80,11 @@ if __name__=="__main__":
         show_heatmap(target.heatmap256)
 
         # TEST 256 heatmap extraction
-        test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
+        test_hmpred = heatmaps_to_coords(target.heatmap256)
         show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         # TEST 64 heatmap extraction
-        test_hmpred, _ = get_preds_fromhm(target.heatmap64, target.center, target.scale)
+        test_hmpred = heatmaps_to_coords(target.heatmap64)
         test_hmpred = test_hmpred * 4 # 64->256
         show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
