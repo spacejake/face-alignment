@@ -258,15 +258,16 @@ class FAN(nn.Module):
         return outputs[-1], outputs
 
 class ResNetDepth(nn.Module):
-
-    def __init__(self, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
-        self.inplanes = 64
+    '''
+    ResNet-152
+    '''
+    def __init__(self, in_features=(3+68), hidden_features=64,
+                 block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
         super(ResNetDepth, self).__init__()
-        self.conv1 = nn.Conv2d(3 + 68, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.hidden_features = hidden_features
+
+        self.layer_in = self._make_input_layer(in_features, hidden_features)
+
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
@@ -282,36 +283,43 @@ class ResNetDepth(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+    def _make_input_layer(self, in_features, hidden_features):
+        return nn.Sequential(
+            nn.Conv2d(in_features, hidden_features,
+                      kernel_size=7, stride=2, padding=3,
+                      bias=False), # 64x128x128
+            nn.BatchNorm2d(hidden_features),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1) # 64 x 64 x64
+        )
+
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
+        if stride != 1 or self.hidden_features != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
+                nn.Conv2d(self.hidden_features, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(planes * block.expansion),
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
+        layers.append(block(self.hidden_features, planes, stride, downsample))
+        self.hidden_features = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(self.hidden_features, planes))
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        x = self.layer_in(x) # 64 x 64 x64
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x = self.layer1(x) # 256 x 64 x 64
+        x = self.layer2(x) # 512 x 32 x 32
+        x = self.layer3(x) # 1024 x 16 x 16
+        x = self.layer4(x) # 2048 x 8 x 8
 
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = self.avgpool(x) # 2048 x 1 x 1
+        x = x.view(x.size(0), -1) # 2048
+        x = self.fc(x) # 68
 
         return x

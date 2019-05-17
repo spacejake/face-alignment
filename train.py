@@ -363,7 +363,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 loss += js_loss(o, target_hm64)
                 #lossfan += criterion.hm(o, target_hm64)
 
-                pts = heatmaps_to_coords(out_hm)
+                pts = heatmaps_to_coords(o)
                 loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
 
             if model.FAN.super_res:
@@ -403,11 +403,15 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             if not model.FAN.super_res:
                 pts = pts * 4
         else:
-            if model.FAN.super_res:
-                out_hm = target.heatmap256
-            else:
-                out_hm = target.heatmap64
+            out_hm = target.heatmap256
             pts = target_pts[:,:,:2]
+
+
+        if train_fan and train_depth:
+            heatmaps = make_gauss(pts, (256, 256), sigma=2)
+            heatmaps = heatmaps.to(device)
+        elif train_depth:
+            heatmaps = target.heatmap256.to(device)
 
         # DEPTH
         lossRegressor = torch.zeros([1], dtype=torch.float32)[0]
