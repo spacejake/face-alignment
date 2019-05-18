@@ -130,8 +130,8 @@ class W300LP(data.Dataset):
         transMat256 = getTransform(c, s, 256, rotate=r)
         for i in range(self.nParts):
             pts[i] = transform(pts[i], transMat256)
-            if pts[i, 0] > 0:
-                heatmap256[i] = make_gauss(pts[i, 0:2], (256, 256), sigma=2., normalize=True)
+        #    if pts[i, 0] > 0:
+        #        heatmap256[i] = make_gauss(pts[i, 0:2], (256, 256), sigma=2., normalize=True)
 
         # inp = color_normalize(inp, self.mean, self.std)
 
