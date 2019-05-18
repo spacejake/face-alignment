@@ -363,7 +363,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 loss += js_loss(o, target_hm64)
                 #lossfan += criterion.hm(o, target_hm64)
 
-                pts = heatmaps_to_coords(out_hm)
+                pts = heatmaps_to_coords(o)
                 loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
 
             if model.FAN.super_res:
@@ -381,7 +381,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 # Laplacian
                 pred_pts256 = torch.cat((pts, target_pts[:, :, 2:]), 2)
                 pred_lap = compute_laplacian(laplacian_mat, pred_pts256)
-                loss += 0.5 * euclidean_losses(pred_lap, target_lap)
+                loss += euclidean_losses(pred_lap, target_lap)
 
                 # combine terms
                 #loss = lossfan.mean()
@@ -389,8 +389,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
                 # Laplacian
                 pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
                 pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
-                loss += 0.5 * euclidean_losses(pred_lap, target_lap64)
-                # pts = pts * 4
+                loss += 1.0 * euclidean_losses(pred_lap, target_lap64)
+                pts = pts * 4
 
 
             loss = loss.mean()
@@ -400,8 +400,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             loss.backward()
             optimizer.FAN.step()
 
-            if not model.FAN.super_res:
-                pts = pts * 4
         else:
             if model.FAN.super_res:
                 out_hm = target.heatmap256
