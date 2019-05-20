@@ -13,7 +13,7 @@ def argparser():
     P.add_argument('--epochs', type=int, default=40, help='Number of total epochs to run')
     P.add_argument('--workers', type=int, default=4, help='number of data loader threads')
     # for a single GPU.
-    P.add_argument('--train-batch', type=int, default=11, help='minibatch size')
+    P.add_argument('--train-batch', type=int, default=10, help='minibatch size')
     P.add_argument('--val-batch', type=int, default=6, help='minibatch size')
     P.add_argument('-c', '--checkpoint', type=str, default='checkpoint', help='model save path')
     P.add_argument('--resume', type=str, default='', help='resume from lastest saved FAN checkpoints')

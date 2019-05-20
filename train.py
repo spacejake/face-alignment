@@ -360,11 +360,21 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
             target_lap64 = compute_laplacian(laplacian_mat, target_pts64)
             for o in output:
+                # Divergence Loss
                 loss += js_loss(o, target_hm64)
-                #lossfan += criterion.hm(o, target_hm64)
 
-                pts = heatmaps_to_coords(o)
-                loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
+                #pts = heatmaps_to_coords(o)
+                #loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
+                
+            # Point-to-point Loss
+            pts = heatmaps_to_coords(out_hm)
+            loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
+            
+            # Laplacian
+            pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
+            pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
+            loss += euclidean_losses(pred_lap, target_lap64)
+            pts = pts * 4
 
             if model.FAN.super_res:
                 #Final Loss, weight higher due to more sparse Heatmap @ 256
@@ -385,13 +395,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
                 # combine terms
                 #loss = lossfan.mean()
-            else:
-                # Laplacian
-                pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
-                pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
-                loss += 1.0 * euclidean_losses(pred_lap, target_lap64)
-                pts = pts * 4
-
 
             loss = loss.mean()
 
