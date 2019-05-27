@@ -404,10 +404,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             optimizer.FAN.step()
 
         else:
-            if model.FAN.super_res:
-                out_hm = target.heatmap256
-            else:
-                out_hm = target.heatmap64
             pts = target_pts[:,:,:2]
 
         # DEPTH
@@ -420,7 +416,7 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
             # Supervision
             # Depth Loss
-            lossDepth = criterion.pts(depth_pred, target_pts[:, :, 2])
+            lossDepth = euclidean_losses(depth_pred.unsqueeze(2), target_pts[:, :, 2:])
 
             # Laplacian Depth Loss
             # Computed for depth only, since both FAN and 3DRegressor are trained separably
@@ -428,9 +424,10 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             tpts256 = target_pts[:, :, 0:2]
             pred_pts256 = torch.cat((tpts256.to(device), depth_pred.unsqueeze(2)), 2)
             pred_lap = compute_laplacian(laplacian_mat.to(device), pred_pts256)
-            lossLap = criterion.laplacian(pred_lap, target_lap)
+            lossLap = euclidean_losses(pred_lap, target_lap)
 
-            lossRegressor = lossDepth + 0.5 * lossLap
+            lossRegressor = lossDepth + lossLap
+            lossRegressor = lossRegressor.mean()
 
             # Back-prop
             optimizer.Depth.zero_grad()
@@ -448,8 +445,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         losses2d.update(loss2D.mean().data, batch_size)
         #lossRegressor = lossDepth + lossLap
         lossesRegressor.update(lossRegressor.data, batch_size)
-        lossesDepth.update(lossDepth.data, batch_size)
-        lossesLap.update(lossLap.data, batch_size)
+        lossesDepth.update(lossDepth.mean().data, batch_size)
+        lossesLap.update(lossLap.mean().data, batch_size)
         acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
@@ -551,11 +548,6 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         else:
             pts = target_pts[:,:,:2]
             output = target.heatmap64.unsqueeze(0)
-
-            if model.FAN.super_res:
-                out_hm = target.heatmap256
-            else:
-                out_hm = target.heatmap64
 
 
         if val_fan and val_depth:
