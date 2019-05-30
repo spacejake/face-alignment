@@ -31,7 +31,7 @@ from face_alignment.util.logger import Logger, savefig
 from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
-from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss
+from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss, hm_losses
 import face_alignment.util.opts as opts
 from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
 
@@ -359,14 +359,18 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             # loss2D = 0
 
             target_lap64 = compute_laplacian(laplacian_mat, target_pts64)
-            for o in output:
+            #Only supervise n-1 stacks with MSE
+            for o in output[:-1]:
+                loss += hm_losses(o, target_hm64)
                 # Divergence Loss
-                loss += js_loss(o, target_hm64)
+                # loss += js_loss(o, target_hm64)
 
+                # Point-to-point Loss
                 #pts = heatmaps_to_coords(o)
                 #loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
                 
-            # Point-to-point Loss
+            # Divergence and Point-to-point Loss
+            loss += js_loss(out_hm, target_hm64)
             pts = heatmaps_to_coords(out_hm)
             loss += euclidean_losses(pts, target_pts64[:,:,:2]) #criterion.hm(pts, target_pts64)
             
@@ -374,6 +378,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
             pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
             loss += euclidean_losses(pred_lap, target_lap64)
+
+            # scale 64->256
             pts = pts * 4
 
             if model.FAN.super_res:

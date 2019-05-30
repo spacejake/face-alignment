@@ -151,6 +151,14 @@ def euclidean_losses(actual, target):
     dist = dist_sq.sqrt()
     return dist
 
+def hm_losses(actual, target):
+    assert actual.size() == target.size(), 'input tensors must have the same size'
+
+    # Calculate MSE between actual and target heatmaps
+    diff = actual - target
+    dist_sq = diff.pow(2).sum(-1, keepdim=False).sum(-1, keepdim=False)
+    dist = dist_sq.sqrt()
+    return dist
 
 def make_gauss(means, size, sigma, normalize=True):
     """Draw Gaussians.
