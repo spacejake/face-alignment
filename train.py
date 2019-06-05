@@ -358,7 +358,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         if train_fan:
             pts, _ = get_preds_fromhm(out_hm.detach().cpu(), target.center, target.scale)
-            pts = pts * 4 # 64->256
         else:
             pts = target.pts[:,:,:2]
 
