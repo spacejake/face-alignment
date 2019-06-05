@@ -96,7 +96,7 @@ class AFLW2000(W300LP):
         # lap_pts = compute_laplacian(self.laplcian, pts)
 
         #return inp, heatmap64, heatmap256, pts, lap_pts, c, s
-        return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), c.float(), s.float()
+        return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), pts.float(), c.float(), s.float()
 
 
 if __name__=="__main__":
