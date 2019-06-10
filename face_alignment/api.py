@@ -15,6 +15,7 @@ except BaseException:
 from .models import FAN, ResNetDepth
 from .utils import *
 from .util.gdrivedl import download, mkdir_safe
+from .util.heatmap import make_gauss, heatmaps_to_coords
 
 
 class LandmarksType(Enum):
@@ -48,6 +49,14 @@ models_urls = {
     '3DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
     '3DFAN-2': '16WZC28wWI7viWlmMILcGKzcyHBoBv2CI',
     'depth': '1jK8zsNsTRKtkeM3OhEvFZZNlWiKywAcL',
+    #########################
+    'FPFAN-4': '',
+    'FPFAN-2': '',
+    'FP-depth': '',
+    #########################
+    'DAFAN-4': '',
+    'DAFAN-2': '',
+    'DA-depth': '',
 }
 
 #models_chkpts = {
@@ -76,6 +85,8 @@ def load_checkpoint(network_name):
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
                  device='cuda', flip_input=False, face_detector='sfd', verbose=False):
+        print("My Version is Running!!")
+
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
@@ -96,9 +107,9 @@ class FaceAlignment:
         self.face_alignment_net = FAN(network_size)
 
         if landmarks_type == LandmarksType._2D:
-            network_name = '2DFAN-' + str(network_size)
+            network_name = 'DAFAN-' + str(network_size)
         else:
-            network_name = '3DFAN-' + str(network_size)
+            network_name = 'DAFAN-' + str(network_size)
         
         fan_checkpoint = load_checkpoint(network_name)
         #fan_weights = fan_checkpoint['state_dict']
@@ -114,7 +125,7 @@ class FaceAlignment:
         # Initialiase the depth prediciton network
         if landmarks_type == LandmarksType._3D:
             self.depth_prediciton_net = ResNetDepth()
-            depth_weights = load_checkpoint('depth')
+            depth_weights = load_checkpoint('DA-depth')
             depth_dict = {
                 k.replace('module.', ''): v for k,
                 v in depth_weights['state_dict'].items()}
@@ -190,20 +201,16 @@ class FaceAlignment:
                 flip_out_hm, _= self.face_alignment_net(flip(inp))
                 out += flip(flip_out_hm.detach(), is_label=True)
 
-            out = out.cpu()
+            #out = out.cpu()
 
-            pts, pts_img = get_preds_fromhm(out, center.unsqueeze(0), scale.unsqueeze(0))
-            pts, pts_img = pts.view(68, 2), pts_img.view(68, 2)
+            pts = heatmaps_to_coords(out)
+            pts_img = scale_preds(pts, center.unsqueeze(0), scale.unsqueeze(0))
+            pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
 
             if self.landmarks_type == LandmarksType._3D:
-                heatmaps = torch.zeros((68, 256, 256), dtype=torch.float)
-                for i in range(68):
-                    if pts[i, 0] > 0:
-                        heatmaps[i] = draw_gaussian(
-                            heatmaps[i], pts[i], 2)
-                heatmaps = heatmaps.unsqueeze_(0)
-
+                heatmaps = make_gauss(pts, (256, 256), sigma=2).unsqueeze(0)
                 heatmaps = heatmaps.to(self.device)
+
                 depth_pred = self.depth_prediciton_net(
                     torch.cat((inp, heatmaps), 1)).data.cpu().view(68, 1)
                 pts_img = torch.cat(

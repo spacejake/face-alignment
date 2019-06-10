@@ -333,6 +333,29 @@ def get_preds_fromhm(hm, center=None, scale=None):
 
     return preds, preds_orig
 
+def scale_preds(preds, center=None, scale=None, res=64):
+    """Obtain (x,y) coordinates given a set of N heatmaps. If the center
+    and the scale is provided the function will return the points also in
+    the original coordinate frame.
+
+    Arguments:
+        preds {torch.tensor} -- the predicted landmarks, of shape [B, N, 2 or 3]
+
+    Keyword Arguments:
+        center {torch.tensor} -- the center of the bounding box (default: {None})
+        scale {float} -- face scale (default: {None})
+        res {float} -- preds resolution size/scale, (typically h or w of heatmap) (default: {64})
+    """
+
+    preds_scaled = torch.zeros(preds.size())
+    if center is not None and scale is not None:
+        for b in range(center.size(0)):
+            transMat = getTransform(center[b], scale[b], res)
+            for i in range(preds.size(0)):
+                for j in range(preds.size(1)):
+                    preds_scaled[i, j] = transform(preds[i, j], transMat, True)
+
+    return preds_scaled
 
 def shuffle_lr(parts, pairs=None, width=None):
     """Shuffle the points left-right according to the axis of symmetry

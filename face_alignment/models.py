@@ -154,7 +154,7 @@ class Interpolate(nn.Module):
 
 class FAN(nn.Module):
 
-    def __init__(self, num_modules=1, super_res=True):
+    def __init__(self, num_modules=1, super_res=False):
         super(FAN, self).__init__()
         self.num_modules = num_modules
         self.super_res = super_res
