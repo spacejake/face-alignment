@@ -95,10 +95,11 @@ def _get_bboxsize(iterable):
     maxs = torch.max(iterable, 0)[0]
 
     center = torch.FloatTensor((maxs[0] - (maxs[0] - mins[0]) / 2,
-                                maxs[1] - (maxs[1] - mins[1]) / 2))
+                                maxs[1] - (maxs[1] - mins[1]) / 2))#,
+                               # maxs[2] - (maxs[2] - mins[2]) / 2))
     # center[1] = center[1] - ((maxs[1] - mins[1]) * 0.12)
 
-    return np.sqrt(abs(maxs[0] - mins[0]) * abs(maxs[1] - mins[1]))
+    return np.sqrt(abs(maxs[0] - mins[0]) * abs(maxs[1] - mins[1])) # * abs(maxs[2] - mins[2]))
 
 
 def accuracy(output, target, idxs, thr=0.08):
