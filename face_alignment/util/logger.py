@@ -36,7 +36,7 @@ class Logger(object):
         self.resume = resume
         self.title = '' if title == None else title
         if fpath is not None:
-            if resume:
+            if resume and os.path.exists(fpath):
                 self.file = open(fpath, 'r')
                 name = self.file.readline()
                 self.names = name.rstrip().split('\t')

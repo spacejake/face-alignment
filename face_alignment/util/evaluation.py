@@ -4,6 +4,8 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from random import randint
+import pickle
+from torch.nn.functional import mse_loss
 
 from .misc import *
 # from .transforms import transform, transform_preds
@@ -184,3 +186,54 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+def convert_to_ori(lms, i, roi_boxs):
+    std_size = 120
+    sx, sy, ex, ey = roi_boxs[i]
+    scale_x = (ex - sx) / std_size
+    scale_y = (ey - sy) / std_size
+    lms[0, :] = lms[0, :] * scale_x + sx
+    lms[1, :] = lms[1, :] * scale_y + sy
+    return lms
+
+
+def calc_nme(preds, target, roi_boxs, idxs, thr):
+    std_size = 120
+
+    nme_list = []
+
+    for i in range(len(roi_boxs)):
+        pts68_fit = preds[i]
+        pts68_gt = target[i]
+
+        sx, sy, ex, ey = roi_boxs[i]
+        # scale_x = (ex - sx) / std_size
+        # scale_y = (ey - sy) / std_size
+        # pts68_fit[:, 0] = pts68_fit[:, 0] * scale_x + sx
+        # pts68_fit[:, 1] = pts68_fit[:, 1] * scale_y + sy
+
+        # build bbox
+        minx, maxx = torch.min(pts68_gt[:, 0]), torch.max(pts68_gt[:, 0])
+        miny, maxy = torch.min(pts68_gt[:, 1]), torch.max(pts68_gt[:, 1])
+        llength = torch.sqrt((maxx - minx) * (maxy - miny))
+
+        #
+        #print(f"Torch.mse = {mse_loss(pts68_fit, pts68_gt)/llength}")
+        dis = (pts68_fit - pts68_gt).t()
+        dis = torch.sqrt(torch.sum(torch.pow(dis, 2), 0))
+        dis = torch.mean(dis)
+        nme = dis / llength
+        # print("ours = {}".format(nme))
+        nme_list.append(nme.cpu().numpy())
+
+    nme_list = torch.from_numpy(np.array(nme_list, dtype=np.float32))
+    # print(nme_list)
+
+    acc = torch.zeros(len(idxs) + 1)
+    # mean_dists = torch.mean(nme_list)
+    acc[0] = nme_list.le(thr).sum() * 1.0 / preds.size(0)
+    # print(acc[0])
+
+    return acc, nme_list
+

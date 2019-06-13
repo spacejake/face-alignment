@@ -17,6 +17,20 @@ from face_alignment.util.imutils import *
 
 from face_alignment.datasets.W300LP import W300LP
 
+def _get_suffix(filename):
+    """a.jpg -> jpg"""
+    pos = filename.rfind('.')
+    if pos == -1:
+        return ''
+    return filename[pos + 1:]
+
+def _load(fp):
+    suffix = _get_suffix(fp)
+    if suffix == 'npy':
+        return np.load(fp)
+    elif suffix == 'pkl':
+        return pickle.load(open(fp, 'rb'))
+
 class AFLW2000(W300LP):
 
     def __init__(self, args, split):
@@ -26,6 +40,9 @@ class AFLW2000(W300LP):
 
 
     def load_extras(self):
+
+        self.roi_boxs = _load(os.path.join(self.img_dir, 'AFLW2000-3D_crop.roi_box.npy'))
+
         # Don't load extras, will only use this dataset for Validation, for now...
         pass
 
