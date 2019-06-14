@@ -40,7 +40,7 @@ class W300LP(data.Dataset):
         self.is_train = self.split is Split.train
         self.anno = self._getDataFaces(self.is_train)
         self.total = len(self.anno)
-        self.roi_boxs = None
+        self.roi_boxes = None
         self.load_extras()
 
         self.g64 = None
@@ -78,10 +78,10 @@ class W300LP(data.Dataset):
         if self.is_train:
             return inp, target
         else:
-            if self.roi_boxs is None:
+            if self.roi_boxes is None:
                 meta = {'index': index, 'center': center, 'scale': scale}
             else:
-                meta = {'index': index, 'center': center, 'scale': scale, 'roi': self.roi_boxs[index]}
+                meta = {'index': index, 'center': center, 'scale': scale, 'roi': self.roi_boxes[index]}
             return inp, target, meta
 
     def generateSampleFace(self, idx):

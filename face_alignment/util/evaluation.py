@@ -200,18 +200,22 @@ def convert_to_ori(lms, i, roi_boxs):
 
 def calc_nme(preds, target, roi_boxs, idxs, thr):
     std_size = 120
+    pred_size = 256
 
     nme_list = []
 
     for i in range(len(roi_boxs)):
-        pts68_fit = preds[i]
-        pts68_gt = target[i]
+        # Normalize predicted
+        pts68_fit = preds[i] / pred_size
+        pts68_gt = target[i] / pred_size
 
         sx, sy, ex, ey = roi_boxs[i]
-        # scale_x = (ex - sx) / std_size
-        # scale_y = (ey - sy) / std_size
-        # pts68_fit[:, 0] = pts68_fit[:, 0] * scale_x + sx
-        # pts68_fit[:, 1] = pts68_fit[:, 1] * scale_y + sy
+        scale_x = (ex - sx) / std_size
+        scale_y = (ey - sy) / std_size
+        pts68_fit[:, 0] = pts68_fit[:, 0] * scale_x + sx
+        pts68_fit[:, 1] = pts68_fit[:, 1] * scale_y + sy
+        pts68_gt[:, 0] = pts68_gt[:, 0] * scale_x + sx
+        pts68_gt[:, 1] = pts68_gt[:, 1] * scale_y + sy
 
         # build bbox
         minx, maxx = torch.min(pts68_gt[:, 0]), torch.max(pts68_gt[:, 0])

@@ -33,18 +33,20 @@ def _load(fp):
 
 class AFLW2000(W300LP):
 
-    def __init__(self, args, split):
+    def __init__(self, args, split, use_roi=False):
         super(AFLW2000, self).__init__(args, split)
         self.is_train = False
         assert self.pointType == '3D', "AFLW2000 provided only 68 3D points"
 
+        self.std_size = 120
+        self.use_roi = use_roi
+
 
     def load_extras(self):
 
-        self.roi_boxs = _load(os.path.join(self.img_dir, 'AFLW2000-3D_crop.roi_box.npy'))
+        # self.roi_boxes = _load(os.path.join(self.img_dir, 'AFLW2000-3D_crop.roi_box.npy'))
+        self.roi_boxes = None
 
-        # Don't load extras, will only use this dataset for Validation, for now...
-        pass
 
     def _getDataFaces(self, is_train):
         base_dir = self.img_dir
@@ -62,10 +64,18 @@ class AFLW2000(W300LP):
         main_pts = sio.loadmat(self.anno[idx])
         raw_pts = main_pts['pt3d_68'][0:3, :].transpose()
         raw_pts = torch.from_numpy(raw_pts)
+
+        # if self.use_roi and self.roi_boxes is not None:
+        #     sx, sy, ex, ey = self.roi_boxes[idx]
+        #     s = torch.FloatTensor(((ex - sx) / self.std_size, (ey - sy) / self.std_size))
+        #     c = torch.FloatTensor((ex-(ex-sx)/2, ey-(ey-sy)/2))
+        #     c[1] -= ((ey-sy) * 0.12).float()
+        # else:
         mins_ = torch.min(raw_pts, 0)[0].view(3) # min vals
         maxs_ = torch.max(raw_pts, 0)[0].view(3) # max vals
         c = torch.FloatTensor((maxs_[0]-(maxs_[0]-mins_[0])/2, maxs_[1]-(maxs_[1]-mins_[1])/2))
         c[1] -= ((maxs_[1]-mins_[1]) * 0.12).float()
+        # s = torch.FloatTensor((maxs_[0]-mins_[0]+maxs_[1]-mins_[1])/195)
         s = (maxs_[0]-mins_[0]+maxs_[1]-mins_[1])/195
 
         img = load_image(self.anno[idx][:-4] + '.jpg')

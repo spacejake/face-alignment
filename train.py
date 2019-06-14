@@ -171,7 +171,7 @@ def main(args):
     Loader = get_loader(args.data)
 
     val_dataset = Loader(args, 'test')
-    roi_boxes = val_dataset.roi_boxs
+    roi_boxes = val_dataset.roi_boxes
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.val_batch,
@@ -520,10 +520,10 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
-        # if roi_boxes is None:
-        acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
-        # else:
-        #     acc, batch_dists = calc_nme(pts_img, target.pts, roi_boxes, idx, thr=0.07)
+        if roi_boxes is None:
+            acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        else:
+            acc, batch_dists = calc_nme(pts_img, target.pts, roi_boxes, idx, thr=0.07)
 
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
