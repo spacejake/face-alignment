@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
+from torch.utils.model_zoo import load_url
 import itertools
 
 from face_alignment import models
@@ -28,7 +29,7 @@ from face_alignment.datasets.common import Target, compute_laplacian
 
 from face_alignment.util.logger import Logger, savefig
 from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
-from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
+from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds, accuracy_depth
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 import face_alignment.util.opts as opts
 
@@ -77,6 +78,11 @@ def get_loader(data):
         # 'LS3D-W': LS3DW,
     }[dataset]
 
+models_urls = {
+    '2DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/2DFAN4-11f355bf06.pth.tar',
+    '3DFAN-4': 'https://www.adrianbulat.com/downloads/python-fan/3DFAN4-7835d9f11d.pth.tar',
+    'depth': 'https://www.adrianbulat.com/downloads/python-fan/depth-2a464da4ea.pth.tar',
+}
 
 def main(args):
     global best_acc
@@ -192,6 +198,10 @@ def main(args):
         else:
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
+        if args.pretrained and train_fan:
+            fan_weights = load_url(models_urls['3DFAN-4'], map_location=lambda storage, loc: storage)
+            model.FAN.load_state_dict(fan_weights)
+
         logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title)
         logger.set_names(['Epoch', 'LR', 'Train Loss', 'Train 3D Loss', 'Train Depth Loss', 'Train Laplacian Loss', 'Valid Loss', 'Valid 3D Loss', 'Train Acc', 'Val Acc', 'AUC'])
 
@@ -213,7 +223,12 @@ def main(args):
             # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
         else:
             print("=> no Depth checkpoint found at '{}'".format(args.resume_depth))
-
+    elif args.pretrained and train_depth:
+        depth_weights = load_url(models_urls['depth'], map_location=lambda storage, loc: storage)
+        depth_dict = {
+            k.replace('module.', ''): v for k,
+                                            v in depth_weights['state_dict'].items()}
+        model.Depth.load_state_dict(depth_dict)
 
     cudnn.benchmark = True
     if train_fan:
@@ -394,7 +409,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         else:
             pts_img = torch.cat((pts, target.pts[:,:,2].unsqueeze(2)), 2)
 
-        acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        if train_fan and train_depth:
+            acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        elif train_fan:
+            acc, _ = accuracy_points(pts_img[...,:2], target.pts[...,:2], idx, thr=0.07)
+        elif train_depth:
+            acc, _ = accuracy_depth(pts_img[...,2:], target.pts[...,2:], idx, thr=0.07)
+
+        # acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
         #lossRegressor = lossDepth + lossLap
@@ -525,7 +547,16 @@ def validate(loader, model, criterion, netType, debug, flip, device):
                 sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
                 io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
-        acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        if val_fan and val_depth:
+            acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        elif val_fan:
+            acc, batch_dists = accuracy_points(pts_img[...,:2], target.pts[...,:2], idx, thr=0.07)
+        elif val_depth:
+            acc, batch_dists = accuracy_depth(pts_img[...,2:], target.pts[...,2:], idx, thr=0.07)
+
+        # acc = (acc2D + accZ)/2
+        # batch_dists = batch_dists2D + batch_distsZ
+
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
         for n in range(inputs.size(0)):

@@ -15,7 +15,7 @@ import torch.utils.data as data
 from face_alignment.datasets.common import Split, Target, compute_laplacian
 from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform, draw_gaussian, get_preds_fromhm
 from face_alignment.util.imutils import *
-from face_alignment.util.evaluation import get_preds
+from face_alignment.util.evaluation import get_preds, accuracy_points, calc_metrics
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -47,7 +47,7 @@ class W300LP(data.Dataset):
 
     def load_extras(self):
         self.mean, self.std = self._comput_mean()
-
+        
         # Load pre-computed laplacian matrix
         laplacianData = sio.loadmat(
             os.path.join(self.img_dir, 'laplacian.mat'))
@@ -188,31 +188,51 @@ if __name__=="__main__":
     datasetLoader = W300LP
     crop_win = None
     loader = torch.utils.data.DataLoader(
-        datasetLoader(args, 'train'),
-        batch_size=1,
+        datasetLoader(args, 'test'),
+        batch_size=args.val_batch,
         #shuffle=True,
-        num_workers=1,
+        num_workers=4,
         pin_memory=True)
-    for i, data in enumerate(loader):
-        input, label = data
+
+    idx = range(1, 69, 1)
+    all_dists256 = torch.zeros((68, loader.dataset.__len__()))
+    all_dists64 = torch.zeros((68, loader.dataset.__len__()))
+    for val_idx, data in enumerate(loader):
+        input, label, meta = data
         target = Target._make(label)
-        show_joints3D(target.pts.squeeze(0))
-        show_joints(input.squeeze(0), target.pts.squeeze(0))
-        show_heatmap(target.heatmap64)
-        show_heatmap(target.heatmap256)
+        # show_joints3D(target.pts.squeeze(0))
+        # show_joints(input.squeeze(0), target.pts.squeeze(0))
+        # show_heatmap(target.heatmap64)
+        # show_heatmap(target.heatmap256)
 
         # TEST 256 heatmap extraction
         test_hmpred, _ = get_preds_fromhm(target.heatmap256, target.center, target.scale)
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
         # TEST 64 heatmap extraction
         test_hmpred, _ = get_preds_fromhm(target.heatmap64, target.center, target.scale)
         test_hmpred = test_hmpred * 4 # 64->256
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
-        # Test other method
-        test_hmpred = get_preds(target.heatmap64) * 4
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        # plt.pause(0.5)
+        # plt.draw()
 
-        plt.pause(0.5)
-        plt.draw()
+        # acc256, batch_dists256 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
+        # all_dists256[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists256
+
+        acc64, batch_dists64 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
+        all_dists64[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists64
+
+
+    # mean_error256 = torch.mean(all_dists256)
+    mean_error64 = torch.mean(all_dists64)
+
+    # auc256 = calc_metrics(all_dists256, path=args.checkpoint, category='300W-Testset-256',
+    #                       method='argmax 256')  # this is auc of predicted maps and target.
+    auc64 = calc_metrics(all_dists64, path=args.checkpoint, category='300W-Testset-64',
+                         method='argmax 64->256')  # this is auc of predicted maps and target.
+
+    # print("=> Mean Error (256): {:.6f}, AUC@0.07: {} based on maps".format(mean_error256 * 100., auc256))
+    print("=> Mean Error (64): {:.6f}, AUC@0.07: {} based on maps".format(mean_error64 * 100., auc64))
+
+
