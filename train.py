@@ -487,7 +487,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             out_hm = target.heatmap64
 
         if val_fan:
-            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
+            pts, pts_orig = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
             pts = pts * 4 # 64->256
             heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
             heatmaps = heatmaps.to(device)
@@ -505,8 +505,11 @@ def validate(loader, model, criterion, netType, debug, flip, device):
 
             depth_pred = depth_pred.cpu()
             pts_img = torch.cat((pts.data, depth_pred.detach().data.unsqueeze(2)), 2)
+            pts_orig = torch.cat(
+                (pts_orig, depth_pred.detach().data.unsqueeze(2) * (1.0 / (256.0 / (200.0 * target.scale)))), 1)
         else:
             pts_img = torch.cat((pts.data, target.pts[:,:,2].unsqueeze(2)), 2)
+            pts_orig = torch.cat((pts_orig, target.pts[:,:,2:]), 2)
 
         if val_idx % 50 == 0:
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
@@ -523,7 +526,32 @@ def validate(loader, model, criterion, netType, debug, flip, device):
         if roi_boxes is None:
             acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
         else:
-            acc, batch_dists = calc_nme(pts_img, target.pts, roi_boxes, idx, thr=0.07)
+            # Convert targets to 120x120
+            # 3DDFA uses 120 x 120 resolution for validation target
+            # All Landmarks must be resized to the 120x120 resolution and rounded
+            target_pts120 = target.pts.clone()
+            pts_val = pts_orig.clone()
+            for n in range(pts_val.size(0)):
+                # Get Center and Scale for 120
+                mins_ = torch.min(target_pts120[n], 0)[0].view(3)  # min vals
+                maxs_ = torch.max(target_pts120[n], 0)[0].view(3)  # max vals
+                # c = torch.FloatTensor((maxs_[0] - (maxs_[0] - mins_[0]) / 2, maxs_[1] - (maxs_[1] - mins_[1]) / 2))
+                # c[1] -= ((maxs_[1] - mins_[1]) * 0.12).float()
+                s = (maxs_[0] - mins_[0] + maxs_[1] - mins_[1]) / 120
+
+                # Construct Transformation Matrix
+                transMat120 = getTransform(target.center[n], s, 120)
+
+                for i in range(pts_val.size(1)):
+                    if pts_val[n, i, 0] > 0:
+                        pts_val[n, i] = transform(pts_val[n, i], transMat120)
+                        pts_val[n, i, :2] = pts_val[n, i, :2] - 1
+
+                    if target_pts120[n, i, 0] > 0:
+                        target_pts120[n, i] = transform(target_pts120[n, i], transMat120)
+                        target_pts120[n, i, :2] = target_pts120[n, i, :2] - 1
+
+            acc, batch_dists = calc_nme(pts_val, target_pts120, roi_boxes, idx, thr=0.07)
 
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 

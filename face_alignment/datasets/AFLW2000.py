@@ -33,7 +33,7 @@ def _load(fp):
 
 class AFLW2000(W300LP):
 
-    def __init__(self, args, split, use_roi=False):
+    def __init__(self, args, split, use_roi=True):
         super(AFLW2000, self).__init__(args, split)
         self.is_train = False
         assert self.pointType == '3D', "AFLW2000 provided only 68 3D points"
@@ -43,9 +43,8 @@ class AFLW2000(W300LP):
 
 
     def load_extras(self):
-
-        # self.roi_boxes = _load(os.path.join(self.img_dir, 'AFLW2000-3D_crop.roi_box.npy'))
-        self.roi_boxes = None
+        self.roi_boxes = _load(os.path.join(self.img_dir, 'AFLW2000-3D_crop.roi_box.npy'))
+        # self.roi_boxes = None
 
 
     def _getDataFaces(self, is_train):
@@ -122,8 +121,12 @@ class AFLW2000(W300LP):
         # Compute Target Laplacian vectors
         # lap_pts = compute_laplacian(self.laplcian, pts)
 
-        #return inp, heatmap64, heatmap256, pts, lap_pts, c, s
-        return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), c.float(), s.float()
+
+        if self.use_roi and self.roi_boxes is not None:
+            return inp.float(), heatmap64.float(), heatmap256.float(), raw_pts.float(), c.float(), s.float()
+        else:
+            return inp.float(), heatmap64.float(), heatmap256.float(), pts.float(), c.float(), s.float()
+
 
 
 if __name__=="__main__":

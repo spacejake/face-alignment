@@ -204,18 +204,18 @@ def calc_nme(preds, target, roi_boxs, idxs, thr):
 
     nme_list = []
 
-    for i in range(len(roi_boxs)):
+    for i in range(preds.size(0)):
         # Normalize predicted
-        pts68_fit = preds[i] / pred_size
-        pts68_gt = target[i] / pred_size
+        pts68_fit = preds[i] #/ pred_size
+        pts68_gt = target[i]
 
-        sx, sy, ex, ey = roi_boxs[i]
-        scale_x = (ex - sx) / std_size
-        scale_y = (ey - sy) / std_size
-        pts68_fit[:, 0] = pts68_fit[:, 0] * scale_x + sx
-        pts68_fit[:, 1] = pts68_fit[:, 1] * scale_y + sy
-        pts68_gt[:, 0] = pts68_gt[:, 0] * scale_x + sx
-        pts68_gt[:, 1] = pts68_gt[:, 1] * scale_y + sy
+        # sx, sy, ex, ey = roi_boxs[i]
+        # scale_x = (ex - sx) / std_size
+        # scale_y = (ey - sy) / std_size
+        # pts68_fit[:, 0] = pts68_fit[:, 0] * scale_x #+ sx
+        # pts68_fit[:, 1] = pts68_fit[:, 1] * scale_y #+ sy
+        # pts68_gt[:, 0] = pts68_gt[:, 0] * scale_x + sx
+        # pts68_gt[:, 1] = pts68_gt[:, 1] * scale_y + sy
 
         # build bbox
         minx, maxx = torch.min(pts68_gt[:, 0]), torch.max(pts68_gt[:, 0])
@@ -236,7 +236,7 @@ def calc_nme(preds, target, roi_boxs, idxs, thr):
 
     acc = torch.zeros(len(idxs) + 1)
     # mean_dists = torch.mean(nme_list)
-    acc[0] = nme_list.le(thr).sum() * 1.0 / preds.size(0)
+    acc[0] = nme_list.le(thr).float().mean()
     # print(acc[0])
 
     return acc, nme_list
