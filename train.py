@@ -29,7 +29,7 @@ from face_alignment.datasets.common import Target
 
 from face_alignment.util.logger import Logger, savefig
 from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
-from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds
+from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds, accuracy_depth
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 import face_alignment.util.opts as opts
 
@@ -391,7 +391,14 @@ def train(loader, model, criterion, optimizer, netType, epoch, iter=0, debug=Fal
         else:
             pts_img = torch.cat((pts, target.pts[:,:,2].unsqueeze(2)), 2)
 
-        acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        if train_fan and train_depth:
+            acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        elif train_fan:
+            acc, _ = accuracy_points(pts_img[...,:2], target.pts[...,:2], idx, thr=0.07)
+        elif train_depth:
+            acc, _ = accuracy_depth(pts_img[...,2:], target.pts[...,2:], idx, thr=0.07)
+
+        # acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, inputs.size(0))
         losseslmk.update(lossDepth.data, inputs.size(0))
@@ -505,7 +512,16 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             sample_hm = sample_with_heatmap(inputs[0], target.heatmap64[0])
             io.imsave(os.path.join(args.checkpoint,"val_input-with-gt-hm64.png"),sample_hm)
 
-        acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        if val_fan and val_depth:
+            acc, batch_dists = accuracy_points(pts_img, target.pts, idx, thr=0.07)
+        elif val_fan:
+            acc, batch_dists = accuracy_points(pts_img[...,:2], target.pts[...,:2], idx, thr=0.07)
+        elif val_depth:
+            acc, batch_dists = accuracy_depth(pts_img[...,2:], target.pts[...,2:], idx, thr=0.07)
+
+        # acc = (acc2D + accZ)/2
+        # batch_dists = batch_dists2D + batch_distsZ
+
         all_dists[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists
 
         for n in range(inputs.size(0)):

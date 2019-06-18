@@ -38,7 +38,8 @@ def calc_dists(preds, target, normalize):
     dists = torch.zeros(preds.size(1), preds.size(0))
     for n in range(preds.size(0)):
         for c in range(preds.size(1)):
-            if target[n, c, 0] > 1 and target[n, c, 1] > 1:
+            # Depth or 2D
+            if target[n, c].size(0) == 1 or (target[n, c] > 1).any():
                 dists[c, n] = torch.dist(preds[n, c, :], target[n, c, :]) / normalize[n]
             else:
                 dists[c, n] = -1
@@ -93,12 +94,12 @@ def calc_metrics(dists, path='', category='', method=''):
 def _get_bboxsize(iterable):
     mins = torch.min(iterable, 0)[0]
     maxs = torch.max(iterable, 0)[0]
-
-    center = torch.FloatTensor((maxs[0] - (maxs[0] - mins[0]) / 2,
-                                maxs[1] - (maxs[1] - mins[1]) / 2))
+    dim = iterable.size(1)
+    # center = torch.FloatTensor((maxs[0] - (maxs[0] - mins[0]) / 2,
+    #                             maxs[1] - (maxs[1] - mins[1]) / 2))
     # center[1] = center[1] - ((maxs[1] - mins[1]) * 0.12)
 
-    return np.sqrt(abs(maxs[0] - mins[0]) * abs(maxs[1] - mins[1]))
+    return np.power(abs(maxs - mins).prod(), 1/dim)
 
 
 def accuracy(output, target, idxs, thr=0.08):
@@ -127,7 +128,38 @@ def accuracy_points(pred, target, idxs, thr=0.08):
     cnt = 0
 
     mean_dists = torch.mean(dists, 0)
-    acc[0] = mean_dists.le(thr).sum() * 1.0 / pred.size(0)
+    acc[0] = mean_dists.le(thr).sum().float() / pred.size(0)
+    # for i in range(len(idxs)):
+    #     acc[i+1] = dist_acc(dists[idxs[i]-1], thr=thr)
+    #     if acc[i+1] >= 0:
+    #         avg_acc = avg_acc + acc[i+1]
+    #         cnt += 1
+
+    # if cnt != 0:
+    #     acc[0] = avg_acc / cnt
+    return acc, dists
+
+
+def accuracy_depth(pred, target, idxs, thr=0.08):
+    ''' Calculate accuracy according to NME, using x,y locations
+    First value to be returned is accuracy calculated based on overall 'idxs'
+    followed by individual accuracies
+    '''
+
+    norm = torch.ones(pred.size(0))
+    for i, gt in enumerate(target):
+        mins = torch.min(gt, 0)[0]
+        maxs = torch.max(gt, 0)[0]
+        norm[i] = abs(maxs - mins)
+
+    dists = calc_dists(pred, target, norm)
+
+    acc = torch.zeros(len(idxs) + 1)
+    avg_acc = 0
+    cnt = 0
+
+    mean_dists = torch.mean(dists, 0)
+    acc[0] = mean_dists.le(thr).sum().float() / pred.size(0)
     # for i in range(len(idxs)):
     #     acc[i+1] = dist_acc(dists[idxs[i]-1], thr=thr)
     #     if acc[i+1] >= 0:
