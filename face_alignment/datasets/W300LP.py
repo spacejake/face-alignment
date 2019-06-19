@@ -17,7 +17,7 @@ from face_alignment.utils import shuffle_lr, flip, crop, getTransform, transform
 from face_alignment.util.imutils import *
 from face_alignment.util.evaluation import get_preds
 from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
-from face_alignment.util.evaluation import calc_metrics, accuracy_points
+from face_alignment.util.evaluation import get_preds, accuracy_points, calc_metrics
 
 '''
 Modified derivative of https://github.com/hzh8311/pyhowfar
@@ -204,7 +204,8 @@ if __name__=="__main__":
         pin_memory=True)
 
     idx = range(1, 69, 1)
-    layer = SpatialSoftmax(256, 256, 68, temperature=1., unnorm=True)
+    # layer = SpatialSoftmax(256, 256, 68, temperature=1., unnorm=True)
+
     all_dists256 = torch.zeros((68, loader.dataset.__len__()))
     all_dists64 = torch.zeros((68, loader.dataset.__len__()))
     for val_idx, data in enumerate(loader):
