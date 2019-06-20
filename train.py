@@ -479,12 +479,14 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             out_hm = target.heatmap64
 
         if val_fan:
-            pts, _ = get_preds_fromhm(out_hm.cpu(), target.center, target.scale)
-            pts = pts * 4 # 64->256
+            out_hm256 = nn.functional.interpolate(out_hm, size=(256, 256), mode='bilinear')
+            pts, _ = get_preds_fromhm(out_hm256.cpu(), target.center, target.scale)
+            #pts = pts * 4 # 64->256
             heatmaps, gauss_256 = gen_heatmap(pts, dim=(pts.size(0), 68, 256, 256), sigma=2, g=gauss_256)
             heatmaps = heatmaps.to(device)
         else:
             pts = target.pts[:,:,:2]
+            out_hm256 = target.heatmap256
             heatmaps = target.heatmap256.to(device)
 
         lossDepth = torch.zeros([1], dtype=torch.float32)[0]
@@ -505,7 +507,7 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
             show_heatmap(out_hm.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64.png"))
             show_heatmap(target.heatmap64.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm64_gt.png"))
-            show_heatmap(heatmaps.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
+            show_heatmap(out_hm256.data[0].cpu().unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256.png"))
             show_heatmap(target.heatmap256.data[0].unsqueeze(0), outname=os.path.join(args.checkpoint,"val_hm256_gt.png"))
             sample_hm = sample_with_heatmap(inputs[0], out_hm[0].detach())
             io.imsave(os.path.join(args.checkpoint,"val_input-with-hm64.png"),sample_hm)
