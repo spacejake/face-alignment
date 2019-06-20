@@ -192,7 +192,8 @@ def main(args):
 
             optimizer.FAN.load_state_dict(checkpoint['optimizer'])
             print("=> Loaded FAN checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
-            logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
+            logger_fn = os.path.join(args.checkpoint, 'log.txt')
+            logger = Logger(logger_fn, title=title, resume=os.path.isfile(logger_fn))
         else:
             print("=> no FAN checkpoint found at '{}'".format(args.resume))
     else:
@@ -218,7 +219,6 @@ def main(args):
 
             optimizer.Depth.load_state_dict(checkpoint['optimizer'])
             print("=> Loaded Depth checkpoint '{}' (epoch {})".format(args.resume_depth, checkpoint['epoch']))
-            # logger = Logger(os.path.join(args.checkpoint, 'log.txt'), title=title, resume=True)
         else:
             print("=> no Depth checkpoint found at '{}'".format(args.resume_depth))
     elif args.pretrained and train_depth:
