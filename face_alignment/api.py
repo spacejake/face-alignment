@@ -191,32 +191,53 @@ class FaceAlignment:
             inp = crop(image, center, scale)
             inp = torch.from_numpy(inp.transpose(
                 (2, 0, 1))).float()
-
-            inp = inp.to(self.device)
             inp.div_(255.0).unsqueeze_(0)
 
-            out, _ = self.face_alignment_net(inp)
-            out = out.detach()
-            if self.flip_input:
-                flip_out_hm, _= self.face_alignment_net(flip(inp))
-                out += flip(flip_out_hm.detach(), is_label=True)
-
-            #out = out.cpu()
-
-            pts = heatmaps_to_coords(out)
-            pts_img = scale_preds(pts, center.unsqueeze(0), scale.unsqueeze(0))
-            pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
-
-            if self.landmarks_type == LandmarksType._3D:
-                heatmaps = make_gauss(pts, (256, 256), sigma=2).unsqueeze(0)
-                heatmaps = heatmaps.to(self.device)
-
-                depth_pred = self.depth_prediciton_net(
-                    torch.cat((inp, heatmaps), 1)).data.cpu().view(68, 1)
-                pts_img = torch.cat(
-                    (pts_img, depth_pred * (1.0 / (256.0 / (200.0 * scale)))), 1)
+            pts_img = self.get_landmarks_from_face_image(inp, center.unsqueeze(0), scale.unsqueeze(0))
 
             landmarks.append(pts_img.numpy())
+
+        return landmarks
+
+
+    def get_landmarks_from_face_image(self, input, center, scale):
+        """Predict the landmarks for each face present in the image.
+
+        This function predicts a set of 68 2D or 3D images, one for each image present.
+        If detect_faces is None the method will also run a face detector.
+
+         Arguments:
+            image_or_path {string or numpy.array or torch.tensor} -- The input image or path to it.
+
+        Keyword Arguments:
+            detected_faces {list of numpy.array} -- list of bounding boxes, one for each face found
+            in the image (default: {None})
+        """
+
+        input = input.to(self.device)
+
+        out, _ = self.face_alignment_net(input)
+        out = out.detach()
+        if self.flip_input:
+            flip_out_hm, _= self.face_alignment_net(flip(input))
+            out += flip(flip_out_hm.detach(), is_label=True)
+
+        #out = out.cpu()
+
+        pts = heatmaps_to_coords(out)
+        pts_img = scale_preds(pts, center, scale)
+        pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
+
+        if self.landmarks_type == LandmarksType._3D:
+            heatmaps = make_gauss(pts, (256, 256), sigma=2).unsqueeze(0)
+            heatmaps = heatmaps.to(self.device)
+
+            depth_pred = self.depth_prediciton_net(
+                torch.cat((input, heatmaps), 1)).data.cpu().view(68, 1)
+            pts_img = torch.cat(
+                (pts_img, depth_pred * (1.0 / (256.0 / (200.0 * scale)))), 1)
+
+        landmarks = pts_img
 
         return landmarks
 
