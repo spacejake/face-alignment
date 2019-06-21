@@ -23,12 +23,13 @@ Modified derivative of https://github.com/hzh8311/pyhowfar
 
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split='train'):
+    def __init__(self, args, split='train', demo=False):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
         self.scale_factor = args.scale_factor
         self.rot_factor = args.rot_factor
+        self.demo = demo
 
         if self.pointType == '2D':
             self.lmk_dir = os.path.join(self.img_dir, 'landmarks')
@@ -71,13 +72,36 @@ class W300LP(data.Dataset):
     def __len__(self):
         return self.total
 
+    def _load_img(self, index):
+        return load_image(os.path.join(self.img_dir, self.anno[index].split('_')[0],
+                                       self.anno[index][:-4] + '.jpg'))
+
+    def _load_anno(self, index):
+        main_pts = sio.loadmat(
+            os.path.join(self.lmk_dir, self.anno[index].split('_')[0],
+                         self.anno[index][:-4] + '.mat'))
+        orig_pts = main_pts['pts_2d'] if self.pointType == '2D' else main_pts['pts_3d']
+        orig_pts = torch.from_numpy(orig_pts)
+        return orig_pts
+
     def __getitem__(self, index):
         inp, heatmap64, heatmap256, pts, center, scale = self.generateSampleFace(index)
         target = Target(heatmap64, heatmap256, pts, center, scale)
         if self.is_train:
             return inp, target
         else:
-            meta = {'index': index, 'center': center, 'scale': scale} #, 'pts': pts,}
+            if not self.demo:
+                meta = {'index': index, 'center': center, 'scale': scale} #, 'pts': pts,}
+            else:
+                # img_fn = os.path.join(self.anno[index].split('_')[0], self.anno[index][:-8] + '.jpg')
+                img_fn = os.path.join(self.anno[index][:-4] + '.jpg')
+
+                orig_img = self._load_img(index)
+                orig_pts = self._load_anno(index)
+
+                meta = {'index': index, 'center': center, 'scale': scale,\
+                        'img_fn': img_fn, 'orig_img': orig_img, 'orig_pts': orig_pts}
+
             return inp, target, meta
 
     def generateSampleFace(self, idx):
@@ -151,7 +175,7 @@ class W300LP(data.Dataset):
                 for i in range(self.total):
                     a = self.anno[i]
                     img_path = os.path.join(self.img_dir, self.anno[i].split('_')[0],
-                                            self.anno[i][:-8] + '.jpg')
+                                            self.anno[i][:-4] + '.jpg')
                     img = load_image(img_path)
                     mean += img.view(img.size(0), -1).mean(1)
                     std += img.view(img.size(0), -1).std(1)

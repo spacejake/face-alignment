@@ -19,8 +19,8 @@ from face_alignment.datasets.W300LP import W300LP
 
 class AFLW2000(W300LP):
 
-    def __init__(self, args, split):
-        super(AFLW2000, self).__init__(args, split)
+    def __init__(self, args, split, demo=False):
+        super(AFLW2000, self).__init__(args, split, demo)
         self.is_train = False
         assert self.pointType == '3D', "AFLW2000 provided only 68 3D points"
 
@@ -37,6 +37,15 @@ class AFLW2000(W300LP):
             lines.append(os.path.join(base_dir, f))
         print('=> loaded AFLW2000 set, {} images were found'.format(len(lines)))
         return sorted(lines)
+
+    def _load_img(self, index):
+        return load_image(self.anno[index][:-4] + '.jpg').float()
+
+    def _load_anno(self, index):
+        main_pts = sio.loadmat(self.anno[index])
+        raw_pts = main_pts['pt3d_68'][0:3, :].transpose()
+        raw_pts = torch.from_numpy(raw_pts).float()
+        return raw_pts
 
     def generateSampleFace(self, idx):
         sf = self.scale_factor
