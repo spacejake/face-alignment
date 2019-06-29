@@ -300,6 +300,8 @@ class ResNetDepth(nn.Module):
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes))
 
+        layers.append(nn.Dropout2d(p=0.1))
+
         return nn.Sequential(*layers)
 
     def forward(self, x):

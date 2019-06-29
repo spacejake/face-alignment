@@ -216,12 +216,12 @@ if __name__=="__main__":
     import face_alignment.util.opts as opts
 
     args = opts.argparser()
-    args.data = "../../data/300W_LP"
+    # args.data = "../../data/300W_LP"
     # dataset = W300LP(args, Split.test)
     datasetLoader = W300LP
     crop_win = None
     loader = torch.utils.data.DataLoader(
-        datasetLoader(args, 'test'),
+        datasetLoader(args, 'train'),
         batch_size=args.val_batch,
         #shuffle=True,
         num_workers=4,
