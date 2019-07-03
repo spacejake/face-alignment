@@ -127,6 +127,14 @@ class W300LP(data.Dataset):
             os.path.join(self.img_dir, self.anno[idx].split('_')[0], self.anno[idx][:-8] +
                          '.jpg'))
 
+        # Cutmix
+        if self.is_train and random.random() <= 0.5:
+            rand_index = torch.randint(0, self.total, (1,))
+            cut_img = load_image(
+                os.path.join(self.img_dir, self.anno[rand_index].split('_')[0], self.anno[rand_index][:-8] +
+                             '.jpg'))
+            img = cutmix(img, cut_img)
+
         return self.genData(img, raw_pts, c, s, sf, rf)
 
     def genData(self, img, raw_pts, c, s, sf, rf):
@@ -147,6 +155,11 @@ class W300LP(data.Dataset):
         # show_joints(img, raw_pts)
 
         inp = im_to_torch(crop(im_to_numpy(img), c, s, 256, rotate=r))
+
+        # # Perform cutout
+        # if self.is_train and random.random() <= 0.5:
+        #     inp = cutout(inp)
+
         # Transform Points
         # 256x256 GT Heatmap and Points
         pts = raw_pts.clone()
@@ -211,6 +224,77 @@ def compute_laplacian(laplacianMat, points):
 
     return lap_pts
 
+def rand_bbox(size, lam):
+    W = size[2]
+    H = size[3]
+    cut_rat = 1.0 - np.sqrt(1.0-lam)
+    cut_w = np.int(W * cut_rat[0])
+    cut_h = np.int(H * cut_rat[1])
+
+    # uniform
+    cx = np.random.randint(W)
+    cy = np.random.randint(H)
+
+    bbx1, bby1, bbx2, bby2 = gen_bbox((cut_w, cut_h), (cx, cy))
+
+    bbx1 = np.clip(bbx1, 0, W)
+    bby1 = np.clip(bby1, 0, H)
+    bbx2 = np.clip(bbx2, 0, W)
+    bby2 = np.clip(bby2, 0, H)
+
+    return bbx1, bby1, bbx2, bby2
+
+def gen_bbox(size, center):
+    cx, cy = center
+    w = size[0]
+    h = size[1]
+
+    bbx1 = cx - w // 2
+    bby1 = cy - h // 2
+    bbx2 = cx + w // 2
+    bby2 = cy + h // 2
+
+    return bbx1, bby1, bbx2, bby2
+
+def cutout(img, low=0.4, high=0.5):
+    # Perform cutout
+    lam = np.random.uniform(low, high, 2)
+    # TODO: use normal center like cutmix
+    bbx1, bby1, bbx2, bby2 = rand_bbox(img.unsqueeze(0).size(), lam)
+    img[:, bbx1:bbx2, bby1:bby2] = 0
+
+def cutmix(img, cut_img, ratio=(0.2, 0.6), m=(310, 220), sigma=(40,50)):
+    # generate mixed sample
+
+    # make random box cut from cut_img
+    lam = np.random.uniform(ratio[0], ratio[1], 2)
+    cbbx1, cbby1, cbbx2, cbby2 = rand_bbox(img.unsqueeze(0).size(), lam)
+    cut_img = cut_img[..., cbbx1:cbbx2, cbby1:cbby2]
+
+    # Place in image, with normal distribution from face center
+    w, h = (cbbx2 - cbbx1), (cbby2 - cbby1)
+    rx, ry = w // 2, h // 2
+    ccx = (cbbx1 + cbbx2) // 2
+    ccy = (cbby1 + cbby2) // 2
+    cx_bounds = (rx, img.size(1) - rx - 1)
+    cy_bounds = (ry, img.size(2) - ry - 1)
+
+    cx = np.clip(int(np.random.normal(310, 40)), cx_bounds[0], cx_bounds[1])
+    cy = np.clip(int(np.random.normal(220, 50)), cy_bounds[0], cy_bounds[1])
+
+    dx = cx - ccx
+    dy = cy - ccy
+
+    bbx1 = dx + cbbx1
+    bby1 = dy + cbby1
+    bbx2 = dx + cbbx2
+    bby2 = dy + cbby2
+
+    img[..., bbx1:bbx2, bby1:bby2] = cut_img
+
+    return img
+
+
 if __name__=="__main__":
     from face_alignment.datasets.common import SpatialSoftmax
     import face_alignment.util.opts as opts
@@ -221,10 +305,10 @@ if __name__=="__main__":
     datasetLoader = W300LP
     crop_win = None
     loader = torch.utils.data.DataLoader(
-        datasetLoader(args, 'train'),
+        datasetLoader(args, 'test'),
         batch_size=args.val_batch,
         #shuffle=True,
-        num_workers=4,
+        num_workers=args.workers,
         pin_memory=True)
 
     idx = range(1, 69, 1)
@@ -235,6 +319,13 @@ if __name__=="__main__":
     for val_idx, data in enumerate(loader):
         input, label, meta = data
         target = Target._make(label)
+
+        # rand_index = torch.randperm(input.size()[0]).cuda()
+
+
+        npimg = im_to_numpy(input[0])
+        io.imsave("mixcut.png", npimg)
+
         # show_joints3D(target.pts.squeeze(0))
         # show_joints(input.squeeze(0), target.pts.squeeze(0))
         # show_heatmap(target.heatmap64)

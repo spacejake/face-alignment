@@ -29,7 +29,7 @@ from face_alignment.datasets.common import Target, compute_laplacian, SpatialSof
 
 
 from face_alignment.util.logger import Logger, savefig
-from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap
+from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap, im_to_numpy
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds, accuracy_depth
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
 from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss, hm_losses
@@ -478,6 +478,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         acces.update(acc[0], batch_size)
 
         if loader_idx % 50 == 0:
+            npimg = im_to_numpy(inputs[0])
+            io.imsave(os.path.join(args.checkpoint,"input.png"),npimg)
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"3dPoints_gt.png"))
 
@@ -598,6 +600,8 @@ def validate(loader, model, criterion, netType, debug, flip, device):
             pts_img = torch.cat((pts.data, target_pts[:,:,2].unsqueeze(2)), 2).cpu()
 
         if val_idx % 50 == 0:
+            npimg = im_to_numpy(inputs[0])
+            io.imsave(os.path.join(args.checkpoint,"val-input.png"),npimg)
             show_joints3D(pts_img.detach()[0], outfn=os.path.join(args.checkpoint,"val_3dPoints.png"))
             show_joints3D(target.pts[0], outfn=os.path.join(args.checkpoint,"val_3dPoints_gt.png"))
 
