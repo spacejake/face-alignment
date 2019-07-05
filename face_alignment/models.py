@@ -262,9 +262,10 @@ class FAN(nn.Module):
 
 class ResNetDepth(nn.Module):
 
-    def __init__(self, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
+    def __init__(self, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68, dropout=False):
         self.inplanes = 64
         super(ResNetDepth, self).__init__()
+        self.dropout = dropout
         self.conv1 = nn.Conv2d(3 + 68, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -300,7 +301,8 @@ class ResNetDepth(nn.Module):
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes))
 
-        # layers.append(nn.Dropout2d(p=0.1))
+        if self.dropout:
+            layers.append(nn.Dropout2d(p=0.1))
 
         return nn.Sequential(*layers)
 
