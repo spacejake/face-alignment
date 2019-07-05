@@ -25,13 +25,14 @@ Modified derivative of https://github.com/hzh8311/pyhowfar
 
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split='train', demo=False):
+    def __init__(self, args, split='train', demo=False, mixcut=True):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
         self.scale_factor = args.scale_factor
         self.rot_factor = args.rot_factor
         self.demo = demo
+        self.mixcut = mixcut
 
         if self.pointType == '2D':
             self.lmk_dir = os.path.join(self.img_dir, 'landmarks')
@@ -127,8 +128,8 @@ class W300LP(data.Dataset):
             os.path.join(self.img_dir, self.anno[idx].split('_')[0], self.anno[idx][:-8] +
                          '.jpg'))
 
-        # Cutmix
-        if self.is_train and random.random() <= 0.5:
+        # Mixcut
+        if self.is_train and self.mixcut and random.random() <= 0.5:
             rand_index = torch.randint(0, self.total, (1,))
             cut_img = load_image(
                 os.path.join(self.img_dir, self.anno[rand_index].split('_')[0], self.anno[rand_index][:-8] +
@@ -231,6 +232,7 @@ def rand_bbox(size, lam):
     cut_w = np.int(W * cut_rat[0])
     cut_h = np.int(H * cut_rat[1])
 
+    # TODO: add option for uniform and normal
     # uniform
     cx = np.random.randint(W)
     cy = np.random.randint(H)
