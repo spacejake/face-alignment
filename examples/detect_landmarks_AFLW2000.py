@@ -16,6 +16,7 @@ from face_alignment.datasets.common import Target
 from face_alignment.datasets.AFLW2000 import AFLW2000
 import face_alignment.util.opts as opts
 from face_alignment.util.imutils import im_to_numpy
+from PIL import Image, ImageDraw
 
 # Run the 3D face alignment on a test image, without CUDA.
 #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
@@ -93,6 +94,17 @@ for i, data in enumerate(loader):
     print("File {}, process Time: {}".format(img_fn, end-start))
     plt.close()
     # break
+
+    pil_image = Image.fromarray(orig_img)
+    d = ImageDraw.Draw(pil_image, 'RGBA')
+
+    for i in range(preds.shape[0]):
+        # d.point((preds[i,0],preds[i,1]), fill=255)
+        x, y = preds[i, 0], preds[i, 1]
+        r = 2
+        d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0, 0, 0))
+
+    pil_image.save('result-{}'.format(img_fn[-14:]))
 
 #plt.savefig('output.png')
 #plt.savefig('output-me.png')

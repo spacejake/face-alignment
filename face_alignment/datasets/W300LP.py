@@ -25,7 +25,7 @@ Modified derivative of https://github.com/hzh8311/pyhowfar
 
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split='train', demo=False, mixcut=True):
+    def __init__(self, args, split='train', demo=False, mixcut=False):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
@@ -338,7 +338,7 @@ if __name__=="__main__":
         acc256, batch_dists256 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
         all_dists256[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists256
 
-        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
         #
         # # sample_hm = sample_with_heatmap(input.squeeze(0), target.heatmap64.squeeze(0))
         # # plt.imshow(sample_hm)
@@ -349,10 +349,10 @@ if __name__=="__main__":
         acc64, batch_dists64 = accuracy_points(test_hmpred, target.pts[:,:,:2], idx, thr=0.07)
         all_dists64[:, val_idx * args.val_batch:(val_idx + 1) * args.val_batch] = batch_dists64
 
-        # show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
 
-        # plt.pause(0.5)
-        # plt.draw()
+        plt.pause(0.5)
+        plt.draw()
 
     mean_error256 = torch.mean(all_dists256)
     mean_error64 = torch.mean(all_dists64)
