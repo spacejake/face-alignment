@@ -54,9 +54,9 @@ models_urls = {
     'FPFAN-2': '',
     'FP-depth': '',
     #########################
-    'DAFAN-4': '',
-    'DAFAN-2': '',
-    'DA-depth': '',
+    'DAFAN-4': '1NrLf4MtplPHCIoFp4qOVUjJ8dptbWipQ',
+    'DAFAN-2': '1fbcCVw9XGeZgHWs4icg84in4Q82LcK7c',
+    'DA-depth': '12JXxeUeiwvGxr3wPiPIIJLB_CngGImV7',
 }
 
 #models_chkpts = {
