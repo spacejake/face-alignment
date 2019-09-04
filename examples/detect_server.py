@@ -20,8 +20,11 @@ import time
 
 class FANDetector:
     def __init__(self):
-        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.LARGE, device='cuda:0', flip_input=False)
-        
+        self.fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D,
+                                               network_size=NetworkSize.LARGE,
+                                               device='cuda:0',
+                                               flip_input=False)
+
 
     def detect(self, image, detected_faces=None):
         #landmarks must be float32, as client expects
