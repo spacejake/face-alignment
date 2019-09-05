@@ -11,7 +11,6 @@ from struct import unpack, pack
 from os import unlink
 from messages.gen.python.messages import messages_pb2
 import numpy as np
-from scipy.misc import toimage
 import threading
 import google.protobuf.internal.decoder as decoder
 import google.protobuf.internal.encoder as encoder

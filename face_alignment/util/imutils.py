@@ -8,6 +8,7 @@ import skimage.io as skio
 import os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from PIL import Image, ImageDraw
 
 from .misc import *
 
@@ -201,3 +202,14 @@ def batch_with_heatmap(inputs, outputs, mean=torch.Tensor([0.5, 0.5, 0.5]), num_
             sample_with_heatmap(inp.clamp(0, 1), outputs[n], num_rows=num_rows, parts_to_show=parts_to_show)
         )
     return np.concatenate(batch_img)
+
+def annotated_pil_image(image, landmakrs):
+    pil_image = Image.fromarray(image)
+    d = ImageDraw.Draw(pil_image, 'RGBA')
+    for i in range(landmakrs.shape[0]):
+        # d.point((preds[i,0],preds[i,1]), fill=255)
+        x, y = landmakrs[i, 0], landmakrs[i, 1]
+        r = 6
+        d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0, 0, 0))
+
+    return pil_image

@@ -25,7 +25,7 @@ Modified derivative of https://github.com/hzh8311/pyhowfar
 
 class W300LP(data.Dataset):
 
-    def __init__(self, args, split='train', demo=False, mixcut=False):
+    def __init__(self, args, split='train', demo=False, mixcut=True):
         self.nParts = 68
         self.pointType = args.pointType
         self.img_dir = args.data
@@ -128,7 +128,11 @@ class W300LP(data.Dataset):
             os.path.join(self.img_dir, self.anno[idx].split('_')[0], self.anno[idx][:-8] +
                          '.jpg'))
 
+        # if self.is_train and random.random() <= 0.4:
+        #     eye_occlusion(img=img, center=raw_pts[27])
         # Mixcut
+        # elif self.is_train and self.mixcut and random.random() <= 0.1:
+
         if self.is_train and self.mixcut and random.random() <= 0.5:
             rand_index = torch.randint(0, self.total, (1,))
             cut_img = load_image(
@@ -251,10 +255,10 @@ def gen_bbox(size, center):
     w = size[0]
     h = size[1]
 
-    bbx1 = cx - w // 2
-    bby1 = cy - h // 2
-    bbx2 = cx + w // 2
-    bby2 = cy + h // 2
+    bbx1 = int(cx - w // 2)
+    bby1 = int(cy - h // 2)
+    bbx2 = int(cx + w // 2)
+    bby2 = int(cy + h // 2)
 
     return bbx1, bby1, bbx2, bby2
 
@@ -263,6 +267,23 @@ def cutout(img, low=0.4, high=0.5):
     lam = np.random.uniform(low, high, 2)
     # TODO: use normal center like cutmix
     bbx1, bby1, bbx2, bby2 = rand_bbox(img.unsqueeze(0).size(), lam)
+    img[:, bbx1:bbx2, bby1:bby2] = 0
+
+def eye_occlusion(img, center, low=0.4, high=0.6):
+    # Perform cutout
+    size = img.unsqueeze(0).size()
+    w_rat = np.random.normal(0.2, 0.01, 1)
+    h_rat = np.random.normal(0.6, 0.05, 1)
+    W = size[2]
+    H = size[3]
+    cut_w = np.int(W * w_rat)
+    cut_h = np.int(H * h_rat)
+
+    cx = center[1]
+    cy = center[0]
+
+    bbx1, bby1, bbx2, bby2 = gen_bbox((cut_w, cut_h), (cx, cy))
+
     img[:, bbx1:bbx2, bby1:bby2] = 0
 
 def cutmix(img, cut_img, ratio=(0.2, 0.6), m=(310, 220), sigma=(40,50)):
@@ -320,18 +341,21 @@ if __name__=="__main__":
     all_dists64 = torch.zeros((68, loader.dataset.__len__()))
     for val_idx, data in enumerate(loader):
         input, label, meta = data
+        # input, label = data
         target = Target._make(label)
 
         # rand_index = torch.randperm(input.size()[0]).cuda()
 
 
         npimg = im_to_numpy(input[0])
-        io.imsave("mixcut.png", npimg)
+        # io.imsave("eye_occlude.png", npimg)
 
         # show_joints3D(target.pts.squeeze(0))
         # show_joints(input.squeeze(0), target.pts.squeeze(0))
         # show_heatmap(target.heatmap64)
         # show_heatmap(target.heatmap256)
+
+        # test_hmpred = heatmaps_to_coords(target.heatmap256)
         #
         test_hmpred = heatmaps_to_coords(target.heatmap256)
 

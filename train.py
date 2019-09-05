@@ -392,7 +392,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
             # Laplacian
             pred_pts64 = torch.cat((pts, target_pts64[:, :, 2:]), 2)
             pred_lap = compute_laplacian(laplacian_mat, pred_pts64)
-            loss += euclidean_losses(pred_lap, target_lap64)
+            w_deform = 1.0 #1.5
+            loss += w_deform * euclidean_losses(pred_lap, target_lap64)
 
             # scale 64->256
             pts = pts * 4
