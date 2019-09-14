@@ -24,12 +24,19 @@ directory = '../test/assets/kinectTest'
 # directory = '../test/assets/MAFA'
 # directory = '../test/assets/jakesupple/'
 # directory = '../test/assets/jakesuppleocclusion/'
+# directory = '../test/assets/wrinkle/'
+# directory = '../test/assets/yucheol/'
+# directory = '/workspace/dataset/HMD-DEMO/'
+# directory = './test-img/'
 
 for filename in os.listdir(directory):
+    print('Found file {}'.format(os.path.join(directory, filename)))
     if filename.endswith(".jpg") or filename.endswith(".png"):
         print('Reading image {}'.format(os.path.join(directory, filename)))
         input = io.imread(os.path.join(directory, filename))
         start = time.time()
+        # input = input[...,[2, 0, 1]]
+        # preds = fa.get_landmarks(input, [[242, 195, 380, 333]])[-1].astype(np.float32)
         preds = fa.get_landmarks(input)
         if preds is None:
             continue
@@ -61,7 +68,7 @@ for filename in os.listdir(directory):
         ax.plot3D(preds[31:36,0]*1.2,preds[31:36,1],preds[31:36,2], color='blue')
         ax.plot3D(preds[36:42,0]*1.2,preds[36:42,1],preds[36:42,2], color='blue')
         ax.plot3D(preds[42:48,0]*1.2,preds[42:48,1],preds[42:48,2], color='blue')
-        ax.plot3D(preds[48:,0]*1.2,preds[48:,1],preds[48:,2], color='blue' )
+        ax.plot3D(preds[48:,0]*1.2,preds[48:,1],preds[48:,2], color='blue')
 
         ax.view_init(elev=90., azim=90.)
         ax.set_xlim(ax.get_xlim()[::-1])
@@ -82,11 +89,11 @@ for filename in os.listdir(directory):
 
         pil_image.save('result-{}'.format(filename))
 
-        break
+        # break
     else:
         print('ignoring file {}'.format(os.path.join(directory, filename)))
-        #continue
-        break
+        continue
+        #break
 
 
 #plt.savefig('output.png')

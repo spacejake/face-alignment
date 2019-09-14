@@ -17,7 +17,6 @@ from .utils import *
 from .util.gdrivedl import download, mkdir_safe
 from .util.heatmap import make_gauss, heatmaps_to_coords
 
-
 class LandmarksType(Enum):
     """Enum class defining the type of landmarks to detect.
 
@@ -57,6 +56,9 @@ models_urls = {
     'DAFAN-4': '1NrLf4MtplPHCIoFp4qOVUjJ8dptbWipQ',
     'DAFAN-2': '1fbcCVw9XGeZgHWs4icg84in4Q82LcK7c',
     'DA-depth': '12JXxeUeiwvGxr3wPiPIIJLB_CngGImV7',
+    'DAFAN-HMD-4': '',
+    'DAFAN-HMD-d1.5-4': '',
+    'DAFAN-MC-d1.5-4': '',
 }
 
 #models_chkpts = {
