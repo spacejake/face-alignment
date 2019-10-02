@@ -18,7 +18,7 @@ def main(config):
 
     # Run the 3D face alignment on a test image, without CUDA.
     #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
-    fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D,
+    fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D,
                                       network_size=NetworkSize.LARGE,
                                       device='cuda',
                                       flip_input=False)
