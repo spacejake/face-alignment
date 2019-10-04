@@ -23,11 +23,6 @@ def main(config):
                                       device='cuda',
                                       flip_input=False)
 
-    if len(sys.argv) != 2:
-        print("usage:%s (cameraID | filename) Detect faces\
-    in the video example:%s 0" % (sys.argv[0], sys.argv[0]))
-        exit(1)
-
     try:
         camID = int(config.camera_id)
     except:
@@ -46,7 +41,7 @@ def main(config):
         # input = cv2.flip(image, 1)
 
         start = time.time()
-        preds = fa.get_landmarks(input)
+        preds = fa.get_landmarks(image)
         end = time.time()
         print("Process Time: {}".format(end-start))
 
@@ -71,7 +66,7 @@ if __name__ == "__main__":
     args = argparse.ArgumentParser()
 
     # hyperparameters
-    args.add_argument('--camera-id', type=int)
+    args.add_argument('--camera-id', type=int, default=0)
 
     config = args.parse_args()
 
