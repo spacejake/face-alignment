@@ -37,27 +37,34 @@ def main(config):
             break
 
         [h, w] = image.shape[:2]
-        # print(h, w)
+        #print("Frame shape: {}".format(image.shape))
         # input = cv2.flip(image, 1)
 
         start = time.time()
+        image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
         preds = fa.get_landmarks(image)
         end = time.time()
-        print("Process Time: {}".format(end-start))
+        #print("Process Time: {}".format(end-start))
 
-        pil_image = Image.fromarray(input)
+        
+        pil_image = Image.fromarray(image)
         frame = ImageDraw.Draw(pil_image, 'RGBA')
 
         if preds is not None:
             for pred in preds:
+                #print("faces detected: {}".format(len(preds)))
 
-                for i in range(preds.shape[0]):
-                    # d.point((preds[i,0],preds[i,1]), fill=255)
-                    x, y = preds[i,0], preds[i,1]
-                    r = math.ceil(max(h, w)/320)
-                    frame.ellipse((x - r, y - r, x + r, y + r), fill=(0, 0, 255, 255), outline=(0,0,0))
+                for i in range(len(preds)):
+                    pred = preds[i]
+                    for j in range(pred.shape[0]):
+                        # d.point((pred[j,0],pred[j,1]), fill=255)
+                        x, y = pred[j,0], pred[j,1]
+                        r = math.ceil(max(h, w)/320)
+                        frame.ellipse((x - r, y - r, x + r, y + r), fill=(0, 255, 0, 255), outline=(0,0,0))
+        
+        np_image = np.asarray(pil_image)
 
-        cv2.imshow("DA-FAN VRST 2019", np.array(frame))
+        cv2.imshow("DA-FAN VRST 2019", cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR))
         k = cv2.waitKey(1) & 0xff
         if k == ord('q') or k == 27:
                 break
