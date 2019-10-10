@@ -8,8 +8,22 @@ except BaseException:
     import urllib as request_file
 
 from ..core import FaceDetector
-from ...util import appdata_dir
+from face_alignment.utils import appdata_dir
 
+
+
+import errno    
+import os
+
+
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:  # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
 
 class DlibDetector(FaceDetector):
     def __init__(self, device, path_to_detector=None, verbose=False):
@@ -25,6 +39,7 @@ class DlibDetector(FaceDetector):
                     base_path, "mmod_human_face_detector.dat")
 
                 if not os.path.isfile(path_to_detector):
+                    mkdir_p(base_path)
                     print("Downloading the face detection CNN. Please wait...")
 
                     path_to_temp_detector = os.path.join(
