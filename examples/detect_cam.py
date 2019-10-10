@@ -21,7 +21,7 @@ def main(config):
     fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D,
                                       network_size=NetworkSize.LARGE,
                                       device='cuda',
-                                      flip_input=False)
+                                      flip_input=False) #, face_detector='dlib')
 
     try:
         camID = int(config.camera_id)
@@ -44,23 +44,20 @@ def main(config):
         image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
         preds = fa.get_landmarks(image)
         end = time.time()
-        #print("Process Time: {}".format(end-start))
+        #print("Process Time: {}, Shape: {}".format(end-start, preds.shape))
 
         
         pil_image = Image.fromarray(image)
         frame = ImageDraw.Draw(pil_image, 'RGBA')
 
         if preds is not None:
-            for pred in preds:
-                #print("faces detected: {}".format(len(preds)))
-
-                for i in range(len(preds)):
-                    pred = preds[i]
-                    for j in range(pred.shape[0]):
-                        # d.point((pred[j,0],pred[j,1]), fill=255)
-                        x, y = pred[j,0], pred[j,1]
-                        r = math.ceil(max(h, w)/320)
-                        frame.ellipse((x - r, y - r, x + r, y + r), fill=(0, 255, 0, 255), outline=(0,0,0))
+            for i in range(preds.shape[0]):
+                pred = preds[i]
+                for j in range(pred.shape[0]):
+                    # d.point((pred[j,0],pred[j,1]), fill=255)
+                    x, y = pred[j,0], pred[j,1]
+                    r = math.ceil(max(h, w)/320)
+                    frame.ellipse((x - r, y - r, x + r, y + r), fill=(0, 255, 0, 255), outline=(0,0,0))
         
         np_image = np.asarray(pil_image)
 

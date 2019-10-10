@@ -183,7 +183,27 @@ class FaceAlignment:
             return None
 
         torch.set_grad_enabled(False)
-        landmarks = []
+#        landmarks = []
+#        for i, d in enumerate(detected_faces):
+#            center = torch.FloatTensor(
+#                [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
+#            center[1] = center[1] - (d[3] - d[1]) * 0.12
+#            scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
+#
+#            inp = crop(image, center, scale)
+#            inp = torch.from_numpy(inp.transpose(
+#                (2, 0, 1))).float()
+#            inp.div_(255.0).unsqueeze_(0)
+#
+#            pts_img = self.get_landmarks_from_face_image(inp, center.unsqueeze(0), scale.unsqueeze(0))
+#
+#            landmarks.append(pts_img.numpy())
+
+        inp_b = None
+        center_b = None
+        scale_b = None
+        landmarks = None
+
         for i, d in enumerate(detected_faces):
             center = torch.FloatTensor(
                 [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
@@ -193,11 +213,20 @@ class FaceAlignment:
             inp = crop(image, center, scale)
             inp = torch.from_numpy(inp.transpose(
                 (2, 0, 1))).float()
-            inp.div_(255.0).unsqueeze_(0)
+            inp.div_(255.0)
 
-            pts_img = self.get_landmarks_from_face_image(inp, center.unsqueeze(0), scale.unsqueeze(0))
+            if inp_b is None:
+                inp_b = inp.unsqueeze_(0)
+                center_b = center.unsqueeze(0)
+                scale_b = scale.unsqueeze(0)
+            else:
+                inp_b = torch.cat((inp_b, inp.unsqueeze_(0)),0)
+                center_b = torch.cat((center_b, center.unsqueeze(0)),0)
+                scale_b = torch.cat((scale_b, scale.unsqueeze(0)),0)
 
-            landmarks.append(pts_img.numpy())
+        if inp_b is not None:
+            pts_img = self.get_landmarks_from_face_image(inp_b, center_b, scale_b)
+            landmarks = pts_img.numpy()
 
         return landmarks
 
@@ -228,7 +257,7 @@ class FaceAlignment:
 
         pts = heatmaps_to_coords(out)
         pts_img = scale_preds(pts, center, scale)
-        pts, pts_img = pts.view(68, 2) * 4, pts_img.view(68, 2)
+        pts, pts_img = pts * 4, pts_img
 
         if self.landmarks_type == LandmarksType._3D:
             heatmaps = make_gauss(pts, (256, 256), sigma=2).unsqueeze(0)
