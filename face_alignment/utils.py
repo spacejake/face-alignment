@@ -351,9 +351,12 @@ def scale_preds(preds, center=None, scale=None, res=64):
     if center is not None and scale is not None:
         for b in range(center.size(0)):
             transMat = getTransform(center[b], scale[b], res)
-            for i in range(preds.size(0)):
-                for j in range(preds.size(1)):
-                    preds_scaled[i, j] = transform(preds[i, j], transMat, True)
+            for i in range(preds[b].size(0)):
+                preds_scaled[b, i] = transform(preds[b, i], transMat, True)
+
+            #for i in range(preds.size(0)):
+            #    for j in range(preds.size(1)):
+            #        preds_scaled[i, j] = transform(preds[i, j], transMat, True)
 
     return preds_scaled
 
