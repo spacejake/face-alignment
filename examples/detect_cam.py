@@ -38,7 +38,7 @@ def main(config):
 
         [h, w] = image.shape[:2]
         #print("Frame shape: {}".format(image.shape))
-        # input = cv2.flip(image, 1)
+        image = cv2.flip(image, 1)
 
         start = time.time()
         image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)

@@ -179,25 +179,10 @@ class FaceAlignment:
             detected_faces = self.face_detector.detect_from_image(image[..., ::-1].copy())
 
         if len(detected_faces) == 0:
-            print("Warning: No faces were detected.")
+            #print("Warning: No faces were detected.")
             return None
 
         torch.set_grad_enabled(False)
-#        landmarks = []
-#        for i, d in enumerate(detected_faces):
-#            center = torch.FloatTensor(
-#                [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
-#            center[1] = center[1] - (d[3] - d[1]) * 0.12
-#            scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
-#
-#            inp = crop(image, center, scale)
-#            inp = torch.from_numpy(inp.transpose(
-#                (2, 0, 1))).float()
-#            inp.div_(255.0).unsqueeze_(0)
-#
-#            pts_img = self.get_landmarks_from_face_image(inp, center.unsqueeze(0), scale.unsqueeze(0))
-#
-#            landmarks.append(pts_img.numpy())
 
         inp_b = None
         center_b = None
