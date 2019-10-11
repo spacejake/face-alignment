@@ -42,7 +42,7 @@ def main(config):
 
         start = time.time()
         image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-        preds = fa.get_landmarks(image)
+        preds, face_dets = fa.get_landmarks(image)
         end = time.time()
         #print("Process Time: {}, Shape: {}".format(end-start, preds.shape))
 
@@ -52,7 +52,9 @@ def main(config):
 
         if preds is not None:
             for i in range(preds.shape[0]):
+                face_det = face_dets[i]
                 pred = preds[i]
+                frame.rectangle(face_det, outline=(255,0,0) )
                 for j in range(pred.shape[0]):
                     # d.point((pred[j,0],pred[j,1]), fill=255)
                     x, y = pred[j,0], pred[j,1]
