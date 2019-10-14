@@ -68,34 +68,39 @@ def dw_conv3x3(in_planes, out_planes, stride=1, bias=True):
 def dw_conv5x5(in_planes, out_planes, stride=1, bias=True):
     return dw_conv(in_planes, out_planes, kernel_size=5, stride=stride, bias=bias)
 
-def dw_conv(in_planes, out_planes, kernel_size=5, stride=1, bias=True):
+def dw_conv(in_planes, out_planes, kernel_size=3, stride=1, padding=None, bias=True):
     "5x5 Depth-wise separable convolution"
-    kernel_size = 5
-    padding = (kernel_size - 1) // 2
+    if padding is None:
+        # Same padding
+        padding = (kernel_size - 1) // 2
 
     return nn.Sequential(
         # dw
-        nn.Conv2d(in_planes, in_planes, kernel_size=5, stride=1, padding=padding, groups=in_planes, bias=bias),
+        nn.Conv2d(in_planes, in_planes,
+                  kernel_size=kernel_size, stride=stride, padding=padding,
+                  groups=in_planes, bias=bias),
         nn.BatchNorm2d(in_planes),
         # pw-linear
-        nn.Conv2d(in_planes, out_planes, 1, 1, 0, bias=bias)
+        nn.Conv2d(in_planes, out_planes, 1, 1, 0, bias=bias),
     )
 
 class DWBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, kernel=5):
+    def __init__(self, in_planes, out_planes, kernel=3):
         super(DWBlock, self).__init__()
         self.bn1 = nn.BatchNorm2d(in_planes)
-        self.conv1 = dw_conv(in_planes, int(out_planes / 4), kernel_size=kernel)
+        self.conv1 = dw_conv(in_planes, int(out_planes / 2), kernel_size=1)
 
-        self.bn2 = nn.BatchNorm2d(int(out_planes / 4))
-        self.conv2 = dw_conv(int(out_planes / 4), out_planes, kernel_size=kernel)
+        self.bn2 = nn.BatchNorm2d(int(out_planes / 2))
+        self.conv2 = dw_conv(int(out_planes / 2), int(out_planes / 2), kernel_size=kernel)
+
+        self.bn3 = nn.BatchNorm2d(int(out_planes / 2))
+        self.conv3 = dw_conv(int(out_planes / 2), out_planes, kernel_size=1)
 
         if in_planes != out_planes:
             self.downsample = nn.Sequential(
                 nn.BatchNorm2d(in_planes),
                 nn.ReLU(True),
-                nn.Conv2d(in_planes, out_planes,
-                          kernel_size=1, stride=1, bias=False),
+                dw_conv(in_planes, out_planes, kernel_size=1),
             )
         else:
             self.downsample = None
@@ -111,6 +116,10 @@ class DWBlock(nn.Module):
         out = F.relu(out, True)
         out = self.conv2(out)
 
+        out = self.bn3(out)
+        out = F.relu(out, True)
+        out = self.conv3(out)
+
         if self.downsample is not None:
             residual = self.downsample(residual)
 
@@ -120,59 +129,20 @@ class DWBlock(nn.Module):
 
 
 class DWConvBlock(nn.Module):
-    def __init__(self, in_planes, out_planes):
+    def __init__(self, in_planes, out_planes, kernel=3):
         super(DWConvBlock, self).__init__()
         self.bn1 = nn.BatchNorm2d(in_planes)
-        self.conv1 = dw_conv5x5(in_planes, int(out_planes / 2))
+        self.conv1 = dw_conv(in_planes, int(out_planes / 2), kernel_size=kernel)
         self.bn2 = nn.BatchNorm2d(int(out_planes / 2))
-        self.conv2 = dw_conv5x5(int(out_planes / 2), int(out_planes / 2))
-
-        if in_planes != out_planes:
-            self.downsample = nn.Sequential(
-                nn.BatchNorm2d(in_planes),
-                nn.ReLU(True),
-                nn.Conv2d(in_planes, out_planes,
-                          kernel_size=1, stride=1, bias=False),
-            )
-        else:
-            self.downsample = None
-
-    def forward(self, x):
-        residual = x
-
-        out1 = self.bn1(x)
-        out1 = F.relu(out1, True)
-        out1 = self.conv1(out1)
-
-        out2 = self.bn2(out1)
-        out2 = F.relu(out2, True)
-        out2 = self.conv2(out2)
-
-        out3 = torch.cat((out1, out2), 1)
-
-        if self.downsample is not None:
-            residual = self.downsample(residual)
-
-        out3 += residual
-
-        return out3
-
-class DWConvBlock3x3(nn.Module):
-    def __init__(self, in_planes, out_planes):
-        super(DWConvBlock3x3, self).__init__()
-        self.bn1 = nn.BatchNorm2d(in_planes)
-        self.conv1 = dw_conv3x3(in_planes, int(out_planes / 2))
-        self.bn2 = nn.BatchNorm2d(int(out_planes / 2))
-        self.conv2 = dw_conv3x3(int(out_planes / 2), int(out_planes / 4))
+        self.conv2 = dw_conv(int(out_planes / 2), int(out_planes / 4), kernel_size=kernel)
         self.bn3 = nn.BatchNorm2d(int(out_planes / 4))
-        self.conv3 = dw_conv3x3(int(out_planes / 4), int(out_planes / 4))
+        self.conv3 = dw_conv(int(out_planes / 4), int(out_planes / 4), kernel_size=kernel)
 
         if in_planes != out_planes:
             self.downsample = nn.Sequential(
                 nn.BatchNorm2d(in_planes),
                 nn.ReLU(True),
-                nn.Conv2d(in_planes, out_planes,
-                          kernel_size=1, stride=1, bias=False),
+                nn.dw_conv(in_planes, out_planes, kernel_size=1),
             )
         else:
             self.downsample = None
@@ -297,29 +267,18 @@ class HourGlass(nn.Module):
         self._generate_network(self.depth)
 
     def _generate_network(self, level):
-        if level < 1:
-            self._generate_network_bottleneck(level)
-            return
 
-        self.add_module('b1_' + str(level), DWConvBlock(self.features, self.features))
+        self.add_module('b1_' + str(level), DWBlock(self.features, self.features))
 
-        self.add_module('b2_' + str(level), DWConvBlock(self.features, self.features))
+        self.add_module('b2_' + str(level), DWBlock(self.features, self.features))
 
-        self._generate_network(level - 1)
+        if level > 1:
+            self._generate_network(level - 1)
+        else:
+            self.add_module('b2_plus_' + str(level), DWBlock(self.features, self.features))
 
-        self.add_module('b3_' + str(level), DWConvBlock(self.features, self.features))
 
-    def _generate_network_bottleneck(self, level):
-        '''
-        Minimum resolution is 4x4, less than the 5x5 kernels of normal network blocks
-        '''
-        self.add_module('b1_' + str(level), DWConvBlock3x3(self.features, self.features))
-
-        self.add_module('b2_' + str(level), DWConvBlock3x3(self.features, self.features))
-
-        self.add_module('b2_plus_' + str(level), DWConvBlock3x3(self.features, self.features))
-
-        self.add_module('b3_' + str(level), DWConvBlock3x3(self.features, self.features))
+        self.add_module('b3_' + str(level), DWBlock(self.features, self.features))
 
     def _forward(self, level, inp):
         # Upper branch
@@ -367,14 +326,14 @@ class FAN(nn.Module):
         # Base part
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = nn.BatchNorm2d(64)
-        self.conv2 = DWConvBlock(64, 128)
-        self.conv3 = DWConvBlock(128, 128)
-        self.conv4 = DWConvBlock(128, 256)
+        self.conv2 = DWBlock(64, 128)
+        self.conv3 = DWBlock(128, 128)
+        self.conv4 = DWBlock(128, 256)
 
         # Stacking part
         for hg_module in range(self.num_modules):
             self.add_module('m' + str(hg_module), HourGlass(1, 4, 256))
-            self.add_module('top_m_' + str(hg_module), DWConvBlock(256, 256))
+            self.add_module('top_m_' + str(hg_module), DWBlock(256, 256))
             self.add_module('conv_last' + str(hg_module),
                             nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
             self.add_module('bn_end' + str(hg_module), nn.BatchNorm2d(256))
