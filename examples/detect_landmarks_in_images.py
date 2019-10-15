@@ -37,7 +37,7 @@ for filename in os.listdir(directory):
         start = time.time()
         # input = input[...,[2, 0, 1]]
         # preds = fa.get_landmarks(input, [[242, 195, 380, 333]])[-1].astype(np.float32)
-        preds = fa.get_landmarks(input)
+        preds, _ = fa.get_landmarks(input)
         if preds is None:
             # get Gaps
             fig = plt.figure(figsize=plt.figaspect(1))

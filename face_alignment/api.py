@@ -199,6 +199,8 @@ class FaceAlignment:
             scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
 
             inp = crop(image, center, scale)
+            #cv2.imshow("face crop", cv2.cvtColor(inp, cv2.COLOR_RGB2BGR))
+
             inp = torch.from_numpy(inp.transpose(
                 (2, 0, 1))).float()
             inp.div_(255.0)

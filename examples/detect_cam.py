@@ -30,6 +30,7 @@ def main(config):
 
     cap = cv2.VideoCapture(camID)
     cv2.namedWindow("DA-FAN VRST 2019", cv2.WINDOW_NORMAL)
+    #cv2.namedWindow("face crop", cv2.WINDOW_NORMAL)
 
     while True:
         ret, image = cap.read()
