@@ -73,7 +73,7 @@ if __name__ == "__main__":
     args = argparse.ArgumentParser()
 
     # hyperparameters
-    args.add_argument('--camera-id', type=int, default=0)
+    args.add_argument('--camera-id', type=str, default=0)
 
     config = args.parse_args()
 

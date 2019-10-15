@@ -183,7 +183,7 @@ class FaceAlignment:
 
         if len(detected_faces) == 0:
             #print("Warning: No faces were detected.")
-            return None
+            return None, None
 
         torch.set_grad_enabled(False)
 

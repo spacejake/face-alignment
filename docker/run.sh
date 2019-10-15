@@ -13,6 +13,8 @@ xhost +local:root; \
     -v $PWD/../:/workspace/src:rw \
     -v $data_path:/workspace/dataset:rw \
     -v /dev/bus/usb:/dev/bus/usb \
+    --ipc host \
+    --env QT_X11_NO_MITSHM=1 \
     morto067/pytorch-cuda9.0-ubuntu16.04
 
 
