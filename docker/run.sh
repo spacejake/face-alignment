@@ -15,6 +15,8 @@ xhost +local:root; \
     -v /dev/bus/usb:/dev/bus/usb \
     --ipc host \
     --env QT_X11_NO_MITSHM=1 \
+    --device=/dev/video0:/dev/video0 \
+    --device=/dev/bus/usb/003/015:/dev/ttyUSB0 \
     morto067/pytorch-cuda9.0-ubuntu16.04
 
 
