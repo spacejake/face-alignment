@@ -14,6 +14,20 @@ import time
 from PIL import Image, ImageDraw
 import cv2
 
+def testDevice(source):
+   cap = cv2.VideoCapture(source)
+   return cap is not None and cap.isOpened()
+
+def getNextDevice(source):
+    idx = (source + 1) % 20
+    while (idx != source):
+        if testDevice(idx):
+            return idx
+        idx = (idx + 1) % 20
+
+    return source
+
+
 def main(config):
 
     # Run the 3D face alignment on a test image, without CUDA.
@@ -67,7 +81,14 @@ def main(config):
         cv2.imshow("DA-FAN VRST 2019", cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR))
         k = cv2.waitKey(1) & 0xff
         if k == ord('q') or k == 27:
-                break
+            break
+        if k == ord('c'):
+            newCamID = getNextDevice(camID)
+            if newCamID != camID:
+                camID = newCamID
+                cap.release()
+                cap = cv2.VideoCapture(camID)
+
 
 if __name__ == "__main__":
     args = argparse.ArgumentParser()
