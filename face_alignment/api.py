@@ -45,6 +45,8 @@ class NetworkSize(Enum):
     def __int__(self):
         return self.value
 
+UNLIMITED_FACES = 0
+
 models_urls = {
     '3DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
     '3DFAN-2': '16WZC28wWI7viWlmMILcGKzcyHBoBv2CI',
@@ -87,13 +89,19 @@ def load_checkpoint(network_name):
 
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
-                 device='cuda', flip_input=False, face_detector='sfd', verbose=False):
+                 device='cuda', flip_input=False, face_detector='sfd', verbose=False,
+                 max_faces=UNLIMITED_FACES):
         print("My Version is Running!!")
 
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
         self.verbose = verbose
+        self.max_faces = max_faces
+
+        if max_faces is None or max_faces <= 0:
+            self.max_faces=UNLIMITED_FACES
+
 
         network_size = int(network_size)
 
@@ -179,6 +187,9 @@ class FaceAlignment:
         if detected_faces is None:
             #start = time.time()
             detected_faces = self.face_detector.detect_from_image(image[..., ::-1].copy())
+            if self.max_faces is not UNLIMITED_FACES:
+                detected_faces = detected_faces[:self.max_faces]
+
             #print("Face Detection: {}s".format(time.time()-start))
 
         if len(detected_faces) == 0:
