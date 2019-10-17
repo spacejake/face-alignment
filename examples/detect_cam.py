@@ -108,7 +108,7 @@ def main(config):
 
     state = setStateFromConfig(defult_state(), config)
 
-    # Run the 3D face alignment on a test image, without CUDA.
+    # Run the 3D face alignment on a test image, with CUDA.
     fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D,
                                       network_size=NetworkSize.LARGE,
                                       device='cuda',
@@ -118,7 +118,6 @@ def main(config):
     # start up camera
     state["cam"] = cv2.VideoCapture(state["cam_id"])
     cv2.namedWindow("DA-FAN VRST 2019", cv2.WINDOW_NORMAL)
-    #cv2.namedWindow("face crop", cv2.WINDOW_NORMAL)
 
     # Program loop
     while state["run"]:
@@ -127,9 +126,9 @@ def main(config):
         if image is None:
             continue
 
-        start = time.time()
+        #start = time.time()
         preds, face_dets = fa.get_landmarks(image)
-        end = time.time()
+        #end = time.time()
         #print("Process Time: {}, Shape: {}".format(end-start, preds.shape))
 
         annot_image = annotate_frame(image, preds, face_dets)
