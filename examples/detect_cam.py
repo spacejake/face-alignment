@@ -142,8 +142,10 @@ if __name__ == "__main__":
     args = argparse.ArgumentParser()
 
     # hyperparameters
-    args.add_argument('--camera-id', type=str, default=0)
-    args.add_argument('--max-faces', type=int, default=0)
+    args.add_argument('--camera-id', type=str, default=0, 
+                      help='uint camera ID or file/path/to/vid.mp4. Default: 0')
+    args.add_argument('--max-faces', type=int, default=0, 
+                      help='Max faces detected, 0 is unlimited. Default: 0')
 
     config = args.parse_args()
 
