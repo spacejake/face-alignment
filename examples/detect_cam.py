@@ -14,6 +14,8 @@ import time
 from PIL import Image, ImageDraw
 import cv2
 
+MAX_CAM=10
+
 def isInt(s):
     try:
         int(s)
@@ -28,11 +30,11 @@ def testDevice(source):
 def getNextDevice(source):
     if not isInt(source): return source
 
-    idx = (source + 1) % 20
+    idx = (source + 1) % MAX_CAM
     while (idx != source):
         if testDevice(idx):
             return idx
-        idx = (idx + 1) % 20
+        idx = (idx + 1) % MAX_CAM
 
     return source
 
@@ -102,6 +104,7 @@ def defult_state():
     }
 
 def main(config):
+    print(config)
 
     state = setStateFromConfig(defult_state(), config)
 
