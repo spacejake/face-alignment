@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 import cv2
 
 MAX_CAM=10
+WINDOW_NAME="VRST 2019: DA-FAN"
 
 def isInt(s):
     try:
@@ -117,7 +118,7 @@ def main(config):
 
     # start up camera
     state["cam"] = cv2.VideoCapture(state["cam_id"])
-    cv2.namedWindow("DA-FAN VRST 2019", cv2.WINDOW_NORMAL)
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
     # Program loop
     while state["run"]:
@@ -133,7 +134,7 @@ def main(config):
 
         annot_image = annotate_frame(image, preds, face_dets)
 
-        cv2.imshow("DA-FAN VRST 2019", annot_image)
+        cv2.imshow(WINDOW_NAME, annot_image)
 
         handle_keypress(state)
 
