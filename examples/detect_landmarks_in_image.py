@@ -23,7 +23,7 @@ from skimage import io
 fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cuda:0', flip_input=True)
 
 input = io.imread('../test/assets/aflw-test.jpg')
-preds = fa.get_landmarks(input)[-1]
+preds, _ = fa.get_landmarks(input)[-1]
 
 #TODO: Make this nice
 fig = plt.figure(figsize=plt.figaspect(.5))

@@ -7,6 +7,7 @@ from skimage import io
 from skimage import color
 import numpy as np
 import cv2
+import time
 try:
     import urllib.request as request_file
 except BaseException:
@@ -43,6 +44,8 @@ class NetworkSize(Enum):
 
     def __int__(self):
         return self.value
+
+UNLIMITED_FACES = 0
 
 models_urls = {
     '3DFAN-4': '1c4JLRAUFWWdzLGM6EW00VigWICZYIww6',
@@ -86,13 +89,19 @@ def load_checkpoint(network_name):
 
 class FaceAlignment:
     def __init__(self, landmarks_type, network_size=NetworkSize.LARGE,
-                 device='cuda', flip_input=False, face_detector='sfd', verbose=False):
+                 device='cuda', flip_input=False, face_detector='sfd', verbose=False,
+                 max_faces=UNLIMITED_FACES):
         print("My Version is Running!!")
 
         self.device = device
         self.flip_input = flip_input
         self.landmarks_type = landmarks_type
         self.verbose = verbose
+        self.max_faces = max_faces
+
+        if max_faces is None or max_faces <= 0:
+            self.max_faces=UNLIMITED_FACES
+
 
         network_size = int(network_size)
 
@@ -176,28 +185,18 @@ class FaceAlignment:
             image = image[..., :3]
 
         if detected_faces is None:
+            #start = time.time()
             detected_faces = self.face_detector.detect_from_image(image[..., ::-1].copy())
+            if self.max_faces is not UNLIMITED_FACES:
+                detected_faces = detected_faces[:self.max_faces]
+
+            #print("Face Detection: {}s".format(time.time()-start))
 
         if len(detected_faces) == 0:
-            print("Warning: No faces were detected.")
-            return None
+            #print("Warning: No faces were detected.")
+            return None, None
 
         torch.set_grad_enabled(False)
-#        landmarks = []
-#        for i, d in enumerate(detected_faces):
-#            center = torch.FloatTensor(
-#                [d[2] - (d[2] - d[0]) / 2.0, d[3] - (d[3] - d[1]) / 2.0])
-#            center[1] = center[1] - (d[3] - d[1]) * 0.12
-#            scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
-#
-#            inp = crop(image, center, scale)
-#            inp = torch.from_numpy(inp.transpose(
-#                (2, 0, 1))).float()
-#            inp.div_(255.0).unsqueeze_(0)
-#
-#            pts_img = self.get_landmarks_from_face_image(inp, center.unsqueeze(0), scale.unsqueeze(0))
-#
-#            landmarks.append(pts_img.numpy())
 
         inp_b = None
         center_b = None
@@ -211,6 +210,8 @@ class FaceAlignment:
             scale = torch.FloatTensor([(d[2] - d[0] + d[3] - d[1]) / self.face_detector.reference_scale])
 
             inp = crop(image, center, scale)
+            #cv2.imshow("face crop", cv2.cvtColor(inp, cv2.COLOR_RGB2BGR))
+
             inp = torch.from_numpy(inp.transpose(
                 (2, 0, 1))).float()
             inp.div_(255.0)
@@ -225,10 +226,12 @@ class FaceAlignment:
                 scale_b = torch.cat((scale_b, scale.unsqueeze(0)),0)
 
         if inp_b is not None:
+            #start = time.time()
             pts_img = self.get_landmarks_from_face_image(inp_b, center_b, scale_b)
+            #print("Landmark Detection: {}s".format(time.time()-start))
             landmarks = pts_img.numpy()
 
-        return landmarks
+        return landmarks, detected_faces
 
 
     def get_landmarks_from_face_image(self, input, center, scale):

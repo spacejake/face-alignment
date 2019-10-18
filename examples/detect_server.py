@@ -29,7 +29,7 @@ class FANDetector:
         #landmarks must be float32, as client expects
 
         start = time.time()
-        pred = self.fa.get_landmarks(image, detected_faces)[-1].astype(np.float32)
+        pred, _ = self.fa.get_landmarks(image, detected_faces)[-1].astype(np.float32)
         end = time.time()
 
         print("Time to process image {}".format(end-start))
