@@ -62,6 +62,7 @@ models_urls = {
     'DAFAN-HMD-4': '',
     'DAFAN-HMD-d1.5-4': '',
     'DAFAN-MC-d1.5-4': '',
+    'DAFAN-MOBILE-5x5-4': '',
 }
 
 #models_chkpts = {
@@ -118,9 +119,9 @@ class FaceAlignment:
         self.face_alignment_net = FAN(network_size)
 
         if landmarks_type == LandmarksType._2D:
-            network_name = 'DAFAN-' + str(network_size)
+            network_name = 'DAFAN-MOBILE-5x5-' + str(network_size)
         else:
-            network_name = 'DAFAN-' + str(network_size)
+            network_name = 'DAFAN-MOBILE-5x5-' + str(network_size)
         
         fan_checkpoint = load_checkpoint(network_name)
         #fan_weights = fan_checkpoint['state_dict']
@@ -263,13 +264,16 @@ class FaceAlignment:
         pts, pts_img = pts * 4, pts_img
 
         if self.landmarks_type == LandmarksType._3D:
-            heatmaps = make_gauss(pts, (256, 256), sigma=2).unsqueeze(0)
+            heatmaps = make_gauss(pts, (256, 256), sigma=2)
             heatmaps = heatmaps.to(self.device)
-
+            #print("in: {} hm: {}".format(input.shape, heatmaps.shape))
             depth_pred = self.depth_prediciton_net(
-                torch.cat((input, heatmaps), 1)).data.cpu().view(68, 1)
+                torch.cat((input, heatmaps), 1)).data.cpu().unsqueeze(-1)#.view(68, 1)
+            rescale = (1.0 / (256.0 / (200.0 * scale))).unsqueeze(-1)
+            #print("2D: {} Z: {} rescale: {}".format(pts_img.shape, depth_pred.shape, rescale.shape))
+            depth_pred = depth_pred * rescale
             pts_img = torch.cat(
-                (pts_img, depth_pred * (1.0 / (256.0 / (200.0 * scale)))), 1)
+                (pts_img, depth_pred), 2)
 
         landmarks = pts_img
 
