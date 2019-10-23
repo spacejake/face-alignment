@@ -79,6 +79,7 @@ def setStateFromConfig(state, config):
         state["cam_id"] = config.camera_id
 
     state["max_faces"] = config.max_faces
+    state["face_det"] = config.face_det
 
     return state
 
@@ -102,6 +103,7 @@ def defult_state():
         "cam":None,
         # tracking states
         "max_faces":0,
+        "face_det":'sfd'
     }
 
 def main(config):
@@ -113,7 +115,8 @@ def main(config):
     fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D,
                                       network_size=NetworkSize.LARGE,
                                       device='cuda',
-                                      max_faces=state["max_faces"]) #, face_detector='dlib')
+                                      max_faces=state["max_faces"],
+                                      face_detector=state["face_det"] )
 
 
     # start up camera
@@ -147,6 +150,8 @@ if __name__ == "__main__":
                       help='uint camera ID or file/path/to/vid.mp4. Default: 0')
     args.add_argument('--max-faces', type=int, default=0, 
                       help='Max faces detected, 0 is unlimited. Default: 0')
+    args.add_argument('--face-det', type=str, choices=['sfd','dlib'], default='sfd', 
+                      help='Face Detector to use SFD is better, dlib is faster. Default: sfd')
 
     config = args.parse_args()
 
