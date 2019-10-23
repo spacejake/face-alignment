@@ -1,4 +1,6 @@
 import sys
+is_py2 = sys.version[0] == '2'
+
 import os
 import argparse
 sys.path.append(os.path.abspath('..'))
@@ -13,9 +15,59 @@ import math
 import time
 from PIL import Image, ImageDraw
 import cv2
+if is_py2:
+    import Queue as queue
+else:
+    import queue as queue
+import queue
+import threading
 
 MAX_CAM=10
 WINDOW_NAME="VRST 2019: DA-FAN"
+
+# bufferless VideoCapture
+class VideoCapture:
+  def __init__(self, name):
+    self.set_cam(name)
+    self._stop = threading.Event()
+    self.q = queue.Queue()
+    self.t = threading.Thread(target=self._reader)
+    self.t.daemon = True
+    self.t.start()
+
+  # read frames as soon as they are available, keeping only most recent one
+  def _reader(self):
+    while (not self._stop.is_set()):
+      ret, frame = self.cam.read()
+      if not ret:
+        self._stop.set()
+        break
+        
+      if not self.q.empty():
+        try:
+          self.q.get_nowait()   # discard previous (unprocessed) frame
+        except Queue.Empty:
+          pass
+      self.q.put(frame)
+    
+
+  def read(self):
+    if self._stop.is_set(): return None
+    return self.q.get()
+
+  def isOpened(self):
+    return self.cam.isOpened()
+
+  def set_cam(self, name):
+    if hasattr(self, 'cap'):
+        self.cam.release()
+    self.cam = cv2.VideoCapture(name)
+
+  def terminate(self):
+    self._stop.set()
+    self.t.join()
+
+
 
 def isInt(s):
     try:
@@ -43,14 +95,14 @@ def handle_keypress(state):
     k = cv2.waitKey(1) & 0xff
     if k == ord('q') or k == 27:
         state["run"] = False
+        state["cam"].terminate()
         return
 
     if k == ord('c'):
         newCamID = getNextDevice(state["cam_id"])
         if newCamID != state["cam_id"]:
             state["cam_id"] = newCamID
-            state["cam"].release()
-            state["cam"] = cv2.VideoCapture(state["cam_id"])
+            state["cam"].set_cam(state["cam_id"])
 
 def annotate_frame(frame, preds, face_dets):
     [h, w] = frame.shape[:2]
@@ -84,9 +136,9 @@ def setStateFromConfig(state, config):
     return state
 
 def read_image(state):
-    ret, image = state["cam"].read()
-    if ret == 0:
-        state["run"] = False
+    image = state["cam"].read()
+    
+    if image is None:
         return None
 
     image = cv2.flip(image, 1)
@@ -106,6 +158,7 @@ def defult_state():
         "face_det":'sfd'
     }
 
+
 def main(config):
     print(config)
 
@@ -120,7 +173,7 @@ def main(config):
 
 
     # start up camera
-    state["cam"] = cv2.VideoCapture(state["cam_id"])
+    state["cam"] = VideoCapture(state["cam_id"])
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
     # Program loop
@@ -128,12 +181,13 @@ def main(config):
         image = read_image(state)
 
         if image is None:
+            #state["run"] = False
             continue
 
         #start = time.time()
         preds, face_dets = fa.get_landmarks(image)
         #end = time.time()
-        #print("Process Time: {}, Shape: {}".format(end-start, preds.shape))
+        #print("Process Time: {}".format(end-start))
 
         annot_image = annotate_frame(image, preds, face_dets)
 
