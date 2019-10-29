@@ -32,7 +32,7 @@ from face_alignment.util.logger import Logger, savefig
 from face_alignment.util.imutils import show_joints3D, show_heatmap, sample_with_heatmap, im_to_numpy
 from face_alignment.util.evaluation import AverageMeter, calc_metrics, accuracy_points, get_preds, accuracy_depth
 from face_alignment.util.misc import adjust_learning_rate, save_checkpoint, save_pred
-from face_alignment.util.heatmap import js_reg_losses, js_loss, euclidean_losses, average_loss, hm_losses
+from face_alignment.util.heatmap import js_loss, euclidean_losses, wing_losses, hm_losses
 import face_alignment.util.opts as opts
 from face_alignment.util.heatmap import make_gauss, heatmaps_to_coords
 
@@ -357,8 +357,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         # FAN
         loss = torch.zeros([1], dtype=torch.float32)[0]
-        lossfan = torch.zeros([1], dtype=torch.float32)[0]
-        loss2D = torch.zeros([1], dtype=torch.float32)[0]
         if train_fan:
             # Forward
             out_hm, output = model.FAN(input_var)
@@ -408,7 +406,8 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
                 # differentiable
                 pts = heatmaps_to_coords(out_hm)
-                loss += euclidean_losses(pts, target_pts[:,:,:2]) #criterion.hm(pts, target_pts[:,:,:2])
+                #loss += wing_losses(pts, target_pts[:,:,:2])
+                loss += euclidean_losses(pts, target_pts[:,:,:2])
 
                 # Laplacian
                 pred_pts256 = torch.cat((pts, target_pts[:, :, 2:]), 2)
@@ -470,8 +469,6 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
         # acc, _ = accuracy_points(pts_img, target.pts, idx, thr=0.07)
 
         losses.update(loss.data, batch_size)
-        lossesfan.update(lossfan.data, batch_size)
-        losses2d.update(loss2D.mean().data, batch_size)
         #lossRegressor = lossDepth + lossLap
         lossesRegressor.update(lossRegressor.data, batch_size)
         lossesDepth.update(lossDepth.mean().data, batch_size)
@@ -498,23 +495,31 @@ def train(loader, model, criterion, optimizer, netType, epoch, laplacian_mat,
 
         batch_time.update(time.time() - end)
         end = time.time()
-        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | ' \
-                     'Loss: {loss:.4f} | lossFAN: {lossfan:.4f} | loss2D: {loss2d:.4f} |' \
-                     'LossRegressor: {lossReg:.4f} | lossDepth: {lossDepth:.4f} | lossLaplacian: {lossLap:.4f} | ' \
-                     'Acc: {acc: .4f}'.format(
+        bar.suffix = '({batch}/{size}) Data: {data:.6f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | '.format(
             batch=loader_idx + 1,
             size=len(loader),
             data=data_time.val,
             bt=batch_time.val,
             total=bar.elapsed_td,
             eta=bar.eta_td,
+        )
+
+        if train_fan:
+            bar.suffix += 'Loss: {loss:.4f} | '.format(
             loss=losses.avg,
-            lossfan=lossesfan.avg,
-            loss2d=losses2d.avg,
-            lossReg=lossesRegressor.avg,
-            lossDepth=lossesDepth.avg,
-            lossLap=lossesLap.avg,
-            acc=acces.avg)
+            )
+
+        if train_depth:
+            bar.suffix += 'LossRegressor: {lossReg:.4f} | ' \
+                          'lossDepth: {lossDepth:.4f} | lossLaplacian: {lossLap:.4f} | '.format(
+                lossReg=lossesRegressor.avg,
+                lossDepth=lossesDepth.avg,
+                lossLap=lossesLap.avg,)
+
+        bar.suffix += 'Acc: {acc: .4f}'.format(
+            acc=acces.avg
+        )
+
         bar.next()
 
     bar.finish()

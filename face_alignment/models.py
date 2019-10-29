@@ -68,33 +68,39 @@ def dw_conv3x3(in_planes, out_planes, stride=1, bias=True):
 def dw_conv5x5(in_planes, out_planes, stride=1, bias=True):
     return dw_conv(in_planes, out_planes, kernel_size=5, stride=stride, bias=bias)
 
-def dw_conv(in_planes, out_planes, kernel_size=3, stride=1, padding=None, bias=True):
+def dw_conv(in_planes, out_planes, kernel_size=3, stride=1, padding=None, bias=True, dilation=1):
     "5x5 Depth-wise separable convolution"
     if padding is None:
         # Same padding
-        padding = (kernel_size - 1) // 2
+        if dilation > 1:
+            padding = (kernel_size + (kernel_size - 1)*(dilation - 1) - 1) // 2
+        else:
+            padding = (kernel_size - 1) // 2
 
     return nn.Sequential(
         # dw
         nn.Conv2d(in_planes, in_planes,
                   kernel_size=kernel_size, stride=stride, padding=padding,
-                  groups=in_planes, bias=bias),
+                  groups=in_planes, bias=bias, dilation=dilation),
         nn.BatchNorm2d(in_planes),
         # pw-linear
         nn.Conv2d(in_planes, out_planes, 1, 1, 0, bias=bias),
     )
 
 class DWBlock(nn.Module):
-    def __init__(self, in_planes, out_planes, kernel=3):
+    def __init__(self, in_planes, out_planes, inner_planes=None, kernel=5, dilation=1):
         super(DWBlock, self).__init__()
         self.bn1 = nn.BatchNorm2d(in_planes)
-        self.conv1 = dw_conv(in_planes, int(out_planes / 2), kernel_size=1)
+        if inner_planes is None:
+            inner_planes = int(out_planes // 2)
+        self.conv1 = dw_conv(in_planes, inner_planes, kernel_size=1)
 
-        self.bn2 = nn.BatchNorm2d(int(out_planes / 2))
-        self.conv2 = dw_conv(int(out_planes / 2), int(out_planes / 2), kernel_size=kernel)
+        self.bn2 = nn.BatchNorm2d(inner_planes)
+        self.conv2 = dw_conv(inner_planes, inner_planes,
+                             kernel_size=kernel, dilation=dilation)
 
-        self.bn3 = nn.BatchNorm2d(int(out_planes / 2))
-        self.conv3 = dw_conv(int(out_planes / 2), out_planes, kernel_size=1)
+        self.bn3 = nn.BatchNorm2d(inner_planes)
+        self.conv3 = dw_conv(inner_planes, out_planes, kernel_size=1)
 
         if in_planes != out_planes:
             self.downsample = nn.Sequential(
@@ -263,23 +269,29 @@ class HourGlass(nn.Module):
         self.num_modules = num_modules
         self.depth = depth
         self.features = num_features
+        self.inner_features = int(self.features * 0.6)
 
         self._generate_network(self.depth)
 
     def _generate_network(self, level):
+        dilation_sz = 1 # 2 if level > 1 else 1
         kernel_sz = 5 if level > 1 else 3
 
-        self.add_module('b1_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz))
+        self.add_module('b1_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz,
+                                                    inner_planes=self.inner_features, dilation=dilation_sz))
 
-        self.add_module('b2_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz))
+        self.add_module('b2_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz,
+                                                    inner_planes=self.inner_features, dilation=dilation_sz))
 
         if level > 1:
             self._generate_network(level - 1)
         else:
-            self.add_module('b2_plus_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz))
+            self.add_module('b2_plus_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz,
+                                                    inner_planes=self.inner_features, dilation=dilation_sz))
 
 
-        self.add_module('b3_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz))
+        self.add_module('b3_' + str(level), DWBlock(self.features, self.features, kernel=kernel_sz,
+                                                    inner_planes=self.inner_features, dilation=dilation_sz))
 
     def _forward(self, level, inp):
         # Upper branch

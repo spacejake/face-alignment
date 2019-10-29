@@ -131,6 +131,42 @@ def flat_softmax(inp):
     return flat.view(*orig_size)
 
 
+def wing_losses(actual, target, wing_w=10, wing_e=2):
+    """Calculate the average Wing loss for multi-point samples.
+
+    Zhen-Hua Feng, Josef Kittler, Muhammad Awais, Patrik Huber, Xiao-Jun Wu.
+    Wing Loss for Robust Facial Landmark Localisation with Convolutional Neural Networks.
+    In Proc. CVPR 2018.
+
+    wing(x) = w * ln(1 + |x|/e) if |x| < w
+              |x| - C           otherwise
+
+    w = range of non-linearity (-w,w)
+    e = limits the curvature of the nonlinear region
+    C = w - w ln(1 + w/e), a constant that smoothly links piecewise linear and nonlinear parts
+
+    # Experiments on AFLW dataset, paper shows best parameters are:
+    w = 10
+    e = 2
+
+    Args:
+        actual (Tensor): Predictions (B x L x D)
+        target (Tensor): Ground truth target (B x L x D)
+
+    """
+    wing_c = wing_w - wing_w * torch.log(1 + wing_w/wing_e)
+
+    assert actual.size() == target.size(), 'input tensors must have the same size'
+
+    # Calculate Wing loss between actual and target locations
+    delta = torch.abs(actual - target)
+    if delta < wing_w:
+        dist = wing_w * torch.log(1 + delta/wing_e)
+    else:
+        dist = delta - wing_c
+
+    return dist.sum(-1, keepdim=False)
+
 def euclidean_losses(actual, target):
     """Calculate the average Euclidean loss for multi-point samples.
 
