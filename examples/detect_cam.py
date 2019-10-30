@@ -57,6 +57,7 @@ def annotate_frame(frame, preds, face_dets):
     pil_image = Image.fromarray(frame)
     draw_image = ImageDraw.Draw(pil_image, 'RGBA')
 
+    r = math.ceil(max(h, w) / 320)
     if preds is not None:
         for i in range(preds.shape[0]):
             face_det = face_dets[i]
@@ -65,7 +66,6 @@ def annotate_frame(frame, preds, face_dets):
             for j in range(pred.shape[0]):
                 # d.point((pred[j,0],pred[j,1]), fill=255)
                 x, y = pred[j, 0], pred[j, 1]
-                r = math.ceil(max(h, w) / 320)
                 draw_image.ellipse((x - r, y - r, x + r, y + r), fill=(0, 255, 0, 255), outline=(0, 0, 0))
 
     np_image = np.asarray(pil_image)

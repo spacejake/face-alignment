@@ -83,19 +83,24 @@ if __name__=="__main__":
     for i, data in enumerate(loader):
         input, label, meta = data
         target = Target._make(label)
-        show_joints3D(target.pts.squeeze(0))
-        show_joints(input.squeeze(0), target.pts.squeeze(0))
-        show_heatmap(target.heatmap64)
-        show_heatmap(target.heatmap256)
+        #show_joints3D(target.pts.squeeze(0))
+        #show_joints(input.squeeze(0), target.pts.squeeze(0))
+        #show_heatmap(target.heatmap64)
+        #show_heatmap(target.heatmap256)
 
         # TEST 256 heatmap extraction
-        test_hmpred = heatmaps_to_coords(target.heatmap256)
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        #test_hmpred = heatmaps_to_coords(target.heatmap256)
+        #show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        img = im_to_numpy(input.squeeze(0)).astype(np.uint8)
+        frame = annotate_frame(img, target.pts.numpy())
+        cv2.imwrite('gt_output.png', frame)
 
         # TEST 64 heatmap extraction
         test_hmpred = heatmaps_to_coords(target.heatmap64)
         test_hmpred = test_hmpred * 4 # 64->256
-        show_joints(input.squeeze(0), test_hmpred.squeeze(0))
+        frame = annotate_frame(img, test_hmpred.numpy())
+        cv2.imwrite('64-256_output.png', frame)
 
-        plt.pause(0.5)
-        plt.draw()
+
+        # plt.pause(0.5)
+        # plt.draw()

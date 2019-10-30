@@ -8,7 +8,9 @@ import skimage.io as skio
 import os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import math
 from PIL import Image, ImageDraw
+import cv2
 
 from .misc import *
 
@@ -120,7 +122,7 @@ def imshow(img):
     plt.imshow(npimg)
     plt.axis('off')
 
-def show_joints(img, pts):
+def show_joints(img, pts, outfn="2D-points.png"):
     imshow(img)
 
     for i in range(pts.size(0)):
@@ -128,6 +130,29 @@ def show_joints(img, pts):
         plt.plot(pts[i, 0], pts[i, 1], marker='o', markersize=1, linestyle='-', color='w', lw=1)
     plt.axis('off')
     plt.show()
+    plt.savefig(outfn)
+
+def annotate_frame(frame, preds, face_dets=None):
+    [h, w] = frame.shape[:2]
+    pil_image = Image.fromarray(frame)
+    draw_image = ImageDraw.Draw(pil_image, 'RGBA')
+
+    r = math.ceil(max(h, w) / 320)
+    if preds is not None:
+        for i in range(preds.shape[0]):
+            pred = preds[i]
+            if face_dets is not None:
+                face_det = face_dets[i]
+                draw_image.rectangle(face_det, outline=(255, 0, 0))
+            for j in range(pred.shape[0]):
+                # d.point((pred[j,0],pred[j,1]), fill=255)
+                x, y = pred[j, 0], pred[j, 1]
+                draw_image.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 0), outline=(255, 255, 255, 70))
+                draw_image.point((x, y), fill=(255, 255, 255))
+
+    np_image = np.asarray(pil_image)
+
+    return cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
 
 def show_joints3D(pts, outfn="3dPoints.png"):
     fig = plt.figure()

@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 
 # Run the 3D face alignment on a test image, without CUDA.
 #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
-fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.LARGE, device='cuda', flip_input=False)
+fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.SMALL, device='cuda', flip_input=False)
 
 #directory = '../test/assets/LandmarkTests'
 #directory = '../test/assets/smallTest'
@@ -28,6 +28,9 @@ directory = '../test/assets/kinectTest'
 # directory = '../test/assets/yucheol/'
 # directory = '/workspace/dataset/HMD-DEMO/'
 # directory = './test-img/'
+directory = '../test/assets/ppt'
+
+output_dir = '.'
 
 for filename in os.listdir(directory):
     print('Found file {}'.format(os.path.join(directory, filename)))
@@ -92,7 +95,7 @@ for filename in os.listdir(directory):
         ax.set_xlim(ax.get_xlim()[::-1])
         # plt.show()
 
-        plt.savefig('output-{}'.format(filename))
+        plt.savefig(os.path.join(output_dir,'lmk','output-{}'.format(filename)))
         print("File {}, process Time: {}".format(filename, end-start))
         plt.close()
 
@@ -106,7 +109,7 @@ for filename in os.listdir(directory):
             r = 2
             d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0,0,0))
 
-        pil_image.save('result-{}'.format(filename))
+        pil_image.save(os.path.join(output_dir, 'result-{}'.format(filename)))
 
         # break
     else:
