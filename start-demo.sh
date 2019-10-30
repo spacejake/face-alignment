@@ -10,7 +10,7 @@ conda activate jake
 
 pushd $DIR/examples
 
-args=$@
+args="$@"
 if [ -z "$@" ]; then
   args="--max-faces 5"
 fi
