@@ -18,7 +18,8 @@ fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size
 
 #directory = '../test/assets/LandmarkTests'
 #directory = '../test/assets/smallTest'
-directory = '../test/assets/kinectTest'
+# directory = '../test/assets/kinectTest'
+directory = '../test/assets/ppt'
 # directory = '../test/assets/jinwoong'
 # directory = '../test/assets/hmd'
 # directory = '../test/assets/MAFA'
@@ -29,7 +30,7 @@ directory = '../test/assets/kinectTest'
 # directory = '/workspace/dataset/HMD-DEMO/'
 # directory = './test-img/'
 
-for filename in os.listdir(directory):
+for idx, filename in enumerate(os.listdir(directory)):
     print('Found file {}'.format(os.path.join(directory, filename)))
     if filename.endswith(".jpg") or filename.endswith(".png"):
         print('Reading image {}'.format(os.path.join(directory, filename)))
@@ -47,14 +48,14 @@ for filename in os.listdir(directory):
             ax.set_xlim(ax.get_xlim()[::-1])
             # plt.show()
 
-            plt.savefig('output-{}'.format(filename))
+            plt.savefig('output-{}.png'.format(idx))
             print("File {}, process Time: {}".format(filename, end - start))
             plt.close()
 
             pil_image = Image.fromarray(input)
             d = ImageDraw.Draw(pil_image, 'RGBA')
 
-            pil_image.save('result-{}'.format(filename))
+            pil_image.save('result-{}.png'.format(idx))
             continue
         preds = preds[0]
         end = time.time()
@@ -92,7 +93,7 @@ for filename in os.listdir(directory):
         ax.set_xlim(ax.get_xlim()[::-1])
         # plt.show()
 
-        plt.savefig('output-{}'.format(filename))
+        plt.savefig('output-{}.png'.format(idx))
         print("File {}, process Time: {}".format(filename, end-start))
         plt.close()
 
@@ -103,10 +104,10 @@ for filename in os.listdir(directory):
             # d.point((preds[i,0],preds[i,1]), fill=255)
             x, y = preds[i,0], preds[i,1]
             # r = 6
-            r = 2
-            d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0,0,0))
+            r = 0.5
+            d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255))#, outline=(0,0,0))
 
-        pil_image.save('result-{}'.format(filename))
+        pil_image.save('result-{}.png'.format(idx))
 
         # break
     else:
