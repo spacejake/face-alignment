@@ -45,8 +45,9 @@ for i, data in enumerate(loader):
 
     print('Reading image {}'.format(os.path.join(img_fn)))
     start = time.time()
-    preds = fa.get_landmarks_from_face_image(input, target.center, target.scale).numpy()
-    preds = preds[0]
+    preds, preds_input = fa.get_landmarks_from_face_image(input, target.center, target.scale)
+    preds = preds[0].numpy()
+    preds_input = preds_input[0].cpu().numpy()
     end = time.time()
 
     #TODO: Make this nice
@@ -96,16 +97,17 @@ for i, data in enumerate(loader):
     plt.close()
     # break
 
-    pil_image = Image.fromarray(orig_img)
+    input_img = im_to_numpy(input[0].clone())
+    pil_image = Image.fromarray(input_img)
     d = ImageDraw.Draw(pil_image, 'RGBA')
 
-    for i in range(preds.shape[0]):
+    for i in range(preds_input.shape[0]):
         # d.point((preds[i,0],preds[i,1]), fill=255)
-        x, y = preds[i, 0], preds[i, 1]
-        r = 2
+        x, y = preds_input[i, 0], preds_input[i, 1]
+        r = 1
         d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0, 0, 0))
 
-    pil_image.save('result-{}'.format(img_fn[-14:]))
+    pil_image.save('result256-{}'.format(img_fn[-14:]))
 
 #plt.savefig('output.png')
 #plt.savefig('output-me.png')
