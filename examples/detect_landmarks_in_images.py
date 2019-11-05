@@ -14,11 +14,11 @@ from PIL import Image, ImageDraw
 
 # Run the 3D face alignment on a test image, without CUDA.
 #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
-fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.SMALL, device='cuda', flip_input=False)
+fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size=NetworkSize.LARGE, device='cuda', flip_input=False)
 
 #directory = '../test/assets/LandmarkTests'
 #directory = '../test/assets/smallTest'
-directory = '../test/assets/kinectTest'
+# directory = '../test/assets/kinectTest'
 # directory = '../test/assets/jinwoong'
 # directory = '../test/assets/hmd'
 # directory = '../test/assets/MAFA'
@@ -30,9 +30,9 @@ directory = '../test/assets/kinectTest'
 # directory = './test-img/'
 directory = '../test/assets/ppt'
 
-output_dir = '.'
+output_dir = './ppt/da-fan-4'
 
-for filename in os.listdir(directory):
+for idx, filename in enumerate(os.listdir(directory)):
     print('Found file {}'.format(os.path.join(directory, filename)))
     if filename.endswith(".jpg") or filename.endswith(".png"):
         print('Reading image {}'.format(os.path.join(directory, filename)))
@@ -50,14 +50,14 @@ for filename in os.listdir(directory):
             ax.set_xlim(ax.get_xlim()[::-1])
             # plt.show()
 
-            plt.savefig('output-{}'.format(filename))
+            plt.savefig(os.path.join(output_dir,'lmk','output-{}'.format(filename)))
             print("File {}, process Time: {}".format(filename, end - start))
             plt.close()
 
             pil_image = Image.fromarray(input)
             d = ImageDraw.Draw(pil_image, 'RGBA')
 
-            pil_image.save('result-{}'.format(filename))
+            pil_image.save(os.path.join(output_dir,'result-{}'.format(filename)))
             continue
         preds = preds[0]
         end = time.time()

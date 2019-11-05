@@ -46,6 +46,7 @@ for i, data in enumerate(loader):
     print('Reading image {}'.format(os.path.join(img_fn)))
     start = time.time()
     preds = fa.get_landmarks_from_face_image(input, target.center, target.scale).numpy()
+    preds = preds[0]
     end = time.time()
 
     #TODO: Make this nice
