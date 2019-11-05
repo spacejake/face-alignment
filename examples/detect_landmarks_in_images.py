@@ -29,6 +29,9 @@ directory = '../test/assets/ppt'
 # directory = '../test/assets/yucheol/'
 # directory = '/workspace/dataset/HMD-DEMO/'
 # directory = './test-img/'
+directory = '../test/assets/ppt'
+
+output_dir = './ppt/3d-fan-4'
 
 for idx, filename in enumerate(os.listdir(directory)):
     print('Found file {}'.format(os.path.join(directory, filename)))
@@ -48,14 +51,14 @@ for idx, filename in enumerate(os.listdir(directory)):
             ax.set_xlim(ax.get_xlim()[::-1])
             # plt.show()
 
-            plt.savefig('output-{}.png'.format(idx))
+            plt.savefig(os.path.join(output_dir,'lmk','output-{}'.format(filename)))
             print("File {}, process Time: {}".format(filename, end - start))
             plt.close()
 
             pil_image = Image.fromarray(input)
             d = ImageDraw.Draw(pil_image, 'RGBA')
 
-            pil_image.save('result-{}.png'.format(idx))
+            pil_image.save(os.path.join(output_dir,'result-{}'.format(filename)))
             continue
         preds = preds[0]
         end = time.time()
@@ -93,7 +96,7 @@ for idx, filename in enumerate(os.listdir(directory)):
         ax.set_xlim(ax.get_xlim()[::-1])
         # plt.show()
 
-        plt.savefig('output-{}.png'.format(idx))
+        plt.savefig(os.path.join(output_dir,'lmk','output-{}'.format(filename)))
         print("File {}, process Time: {}".format(filename, end-start))
         plt.close()
 
@@ -104,10 +107,10 @@ for idx, filename in enumerate(os.listdir(directory)):
             # d.point((preds[i,0],preds[i,1]), fill=255)
             x, y = preds[i,0], preds[i,1]
             # r = 6
-            r = 0.5
-            d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255))#, outline=(0,0,0))
+            r = 2
+            d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0,0,0))
 
-        pil_image.save('result-{}.png'.format(idx))
+        pil_image.save(os.path.join(output_dir, 'result-{}'.format(filename)))
 
         # break
     else:
