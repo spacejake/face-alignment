@@ -11,12 +11,14 @@ from skimage import io
 import os
 import time
 
+import cv2
 import torch
 from face_alignment.datasets.common import Target
 from face_alignment.datasets.AFLW2000 import AFLW2000
 import face_alignment.util.opts as opts
 from face_alignment.util.imutils import im_to_numpy
 from PIL import Image, ImageDraw
+from face_alignment.utils import crop_only
 
 # Run the 3D face alignment on a test image, without CUDA.
 #fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, device='cpu', flip_input=True)
@@ -97,17 +99,28 @@ for i, data in enumerate(loader):
     plt.close()
     # break
 
-    input_img = im_to_numpy(input[0].clone())
+    # input_img = im_to_numpy(input[0].clone())
+    # pil_image = Image.fromarray(input_img)
+    input_img = orig_img
     pil_image = Image.fromarray(input_img)
     d = ImageDraw.Draw(pil_image, 'RGBA')
 
-    for i in range(preds_input.shape[0]):
+    for i in range(preds.shape[0]):
         # d.point((preds[i,0],preds[i,1]), fill=255)
-        x, y = preds_input[i, 0], preds_input[i, 1]
+        x, y = preds[i, 0], preds[i, 1]
         r = 1
-        d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255), outline=(0, 0, 0))
+        d.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 255))#, outline=(0, 0, 0))
 
-    pil_image.save('result256-{}'.format(img_fn[-14:]))
+    # pil_image.save('result256-{}'.format(img_fn[-14:]))
+
+    np_image = np.asarray(pil_image)
+    np_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2BGR)
+
+    np_image = crop_only(np_image, target.center.squeeze(0), target.scale.squeeze(0))
+
+    cv2.imwrite('result-crop-{}'.format(img_fn[-14:]), np_image)
+
+
 
 #plt.savefig('output.png')
 #plt.savefig('output-me.png')
