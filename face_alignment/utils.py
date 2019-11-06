@@ -341,15 +341,15 @@ def get_preds_fromhm(hm, center=None, scale=None):
     preds[..., 0].apply_(lambda x: (x - 1) % hm.size(3) + 1)
     preds[..., 1].add_(-1).div_(hm.size(2)).floor_().add_(1)
 
-    # for i in range(preds.size(0)):
-    #     for j in range(preds.size(1)):
-    #         hm_ = hm[i, j, :]
-    #         pX, pY = int(preds[i, j, 0]) - 1, int(preds[i, j, 1]) - 1
-    #         if pX > 0 and pX < width and pY > 0 and pY < height:
-    #             diff = torch.FloatTensor(
-    #                 [hm_[pY, pX + 1] - hm_[pY, pX - 1],
-    #                  hm_[pY + 1, pX] - hm_[pY - 1, pX]])
-    #             preds[i, j].add_(diff.sign_().mul_(.25))
+    for i in range(preds.size(0)):
+        for j in range(preds.size(1)):
+            hm_ = hm[i, j, :]
+            pX, pY = int(preds[i, j, 0]) - 1, int(preds[i, j, 1]) - 1
+            if pX > 0 and pX < width and pY > 0 and pY < height:
+                diff = torch.FloatTensor(
+                    [hm_[pY, pX + 1] - hm_[pY, pX - 1],
+                     hm_[pY + 1, pX] - hm_[pY - 1, pX]])
+                preds[i, j].add_(diff.sign_().mul_(.25))
 
     if hm.size(3) == 64:
        preds.add_(-.5)
