@@ -98,7 +98,7 @@ class AFLW2000(W300LP):
         for i in range(self.nParts):
             if tpts[i, 0] > 0:
                 tpts[i] = transform(tpts[i], transMat64)
-                heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2]-1, 1, g=self.g64)
+                heatmap64[i], self.g64 = draw_gaussian(heatmap64[i], tpts[i, 0:2], 1, g=self.g64)
                 # heatmap64[i] = draw_labelmap(heatmap64[i], tpts[i] - 1, sigma=1)
 
         # Compute Target Laplacian vectors
