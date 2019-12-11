@@ -413,7 +413,7 @@ def backwardG(fake, loss_hm, model, opt, crit, weight_hm=1.0):
     loss_G = crit(pred_fake, true)
 
     # Combined Loss
-    loss_G_total = loss_G +  weight_hm * loss_hm
+    loss_G_total = 10 * loss_G +  weight_hm * loss_hm
 
     # backward
     opt.zero_grad()

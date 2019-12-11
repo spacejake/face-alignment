@@ -172,7 +172,7 @@ def show_joints3D(pts, outfn="3dPoints.png"):
     plt.close()
 
 
-def show_heatmap(target, outname="heatmap.png"):
+def show_heatmap_sum(target, outname="heatmap.png"):
     num_sample = target.size(0)
     num_joints = target.size(1)
     width = target.size(2)
@@ -182,6 +182,20 @@ def show_heatmap(target, outname="heatmap.png"):
         out = torch.zeros(width, height)
         for p in range(num_joints):
             out += target[n,p,:,:] / torch.max(target[n,p,:,:])
+
+        plt.imshow(color_heatmap(out))
+        plt.show()
+        plt.imsave(outname, color_heatmap(out))
+        plt.close()
+
+def show_heatmap(target, outname="heatmap.png"):
+    num_sample = target.size(0)
+    num_joints = target.size(1)
+    width = target.size(2)
+    height = target.size(3)
+
+    for n in range(num_sample):
+        out = torch.max(target[n], 0)[0]/torch.max(target[n])
 
         plt.imshow(color_heatmap(out))
         plt.show()
