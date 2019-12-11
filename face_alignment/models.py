@@ -154,10 +154,9 @@ class Interpolate(nn.Module):
 
 class FAN(nn.Module):
 
-    def __init__(self, num_modules=1, super_res=False):
+    def __init__(self, num_modules=1):
         super(FAN, self).__init__()
         self.num_modules = num_modules
-        self.super_res = super_res
 
         # Base part
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3)
@@ -182,40 +181,6 @@ class FAN(nn.Module):
                 'bl' + str(hg_module), nn.Conv2d(256, 256, kernel_size=1, stride=1, padding=0))
             self.add_module('al' + str(hg_module), nn.Conv2d(68,
                                                              256, kernel_size=1, stride=1, padding=0))
-
-        if self.super_res:
-            input_skip_seq = [
-                conv3x3(3, 128),
-                nn.BatchNorm2d(128),
-            ]
-            self.input_skip = nn.Sequential(*input_skip_seq)
-
-            downsample_seq = [
-                conv3x3(256, 256),
-                nn.BatchNorm2d(256),
-            ]
-            self.downsample_layer = nn.Sequential(*downsample_seq)
-
-            # output
-            up_sequence = [
-                ConvBlock(256, 256),
-                Interpolate(size=(128,128), mode='bilinear'), # 64 -> 128
-                conv3x3(256, 128),
-                nn.BatchNorm2d(128),
-                nn.ReLU(inplace=True),
-                Interpolate(size=(256, 256), mode='bilinear'), # 128 -> 256
-            ]
-            self.up_layer = nn.Sequential(*up_sequence)
-
-            output_sequence = [
-                conv3x3(128, 128),
-                nn.BatchNorm2d(128),
-                conv3x3(128, 128),
-                nn.BatchNorm2d(128),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(128, 68, kernel_size=1, stride=1, padding=0)
-            ]
-            self.output_layer = nn.Sequential(*output_sequence)
 
     def forward(self, input):
         x = F.relu(self.bn1(self.conv1(input)), True)
@@ -247,16 +212,6 @@ class FAN(nn.Module):
 
             if i < self.num_modules - 1:
                 previous = previous + ll + tmp_out_
-
-        if self.super_res:
-            # x = self.downsample_layer(x)
-            out = self.downsample_layer(x) + ll + tmp_out_
-            out = self.up_layer(out)
-            out = self.input_skip(input) + out
-            out = self.output_layer(out)
-
-            # return out, outputs
-            return torch.sigmoid(out), outputs
 
         return outputs[-1], outputs
 
@@ -322,3 +277,239 @@ class ResNetDepth(nn.Module):
         x = self.fc(x)
 
         return x
+
+#ResNet Patch Discriminator, based on SN-GAN  https://github.com/godisboy/SN-GAN/
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, hidden_channels=None, use_BN = False, downsample=False):
+        super(ResBlock, self).__init__()
+        hidden_channels = in_channels
+        self.downsample = downsample
+
+        self.resblock = self.make_res_block(in_channels, out_channels, hidden_channels, use_BN, downsample)
+        self.residual_connect = self.make_residual_connect(in_channels, out_channels)
+
+
+    def make_res_block(self, in_channels, out_channels, hidden_channels, use_BN, downsample):
+        model = []
+        if use_BN:
+            model += [nn.BatchNorm2d(in_channels)]
+
+        model += [nn.LeakyReLU()]
+        model += [conv3x3(in_channels, hidden_channels, padding=1)]
+        model += [nn.LeakyReLU()]
+        model += [conv3x3(hidden_channels, out_channels, padding=1)]
+        if downsample:
+            model += [nn.AvgPool2d(2)]
+        return nn.Sequential(*model)
+
+
+    def make_residual_connect(self, in_channels, out_channels):
+        model = []
+        model += [nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)]
+        if self.downsample:
+            model += [nn.AvgPool2d(2)]
+            return nn.Sequential(*model)
+        else:
+            return nn.Sequential(*model)
+
+    def forward(self, input):
+        return self.resblock(input) + self.residual_connect(input)
+
+class OptimizedBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(OptimizedBlock, self).__init__()
+        self.res_block = self.make_res_block(in_channels, out_channels)
+        self.residual_connect = self.make_residual_connect(in_channels, out_channels)
+    def make_res_block(self, in_channels, out_channels):
+        model = []
+        model += [conv3x3(in_channels, out_channels, padding=1)]
+        model += [nn.LeakyReLU(0.2, True)]
+        model += [conv3x3(out_channels, out_channels, padding=1)]
+        model += [nn.AvgPool2d(2)]
+        return nn.Sequential(*model)
+
+
+    def make_residual_connect(self, in_channels, out_channels):
+        model = []
+        model += [nn.Conv2d(in_channels, out_channels, kernel_size=1, padding=0)]
+        model += [nn.AvgPool2d(2)]
+        return nn.Sequential(*model)
+
+
+    def forward(self, input):
+        return self.res_block(input) + self.residual_connect(input)
+
+class ResPatchDiscriminator(nn.Module):
+    def __init__(self, in_channels=3, ndf=64, ndlayers=4, use_sigmoid=False):
+        super(ResPatchDiscriminator, self).__init__()
+        self.res_d = self.make_model(in_channels, ndf, ndlayers, use_sigmoid)
+
+    def make_model(self, in_channels, ndf, ndlayers, use_sigmoid):
+        model = []
+        model += [OptimizedBlock(in_channels, ndf)]
+        tndf = ndf
+        downsample = True
+        for i in range(ndlayers):
+            model += [ResBlock(tndf, tndf*2, downsample=downsample)]
+            # downsample = not downsample
+            tndf *= 2
+        model += [nn.LeakyReLU(0.2, True)]
+
+        # output 1 channel
+        model += [ResBlock(tndf, 1, downsample=False)]
+
+        if use_sigmoid:
+            model += [nn.Sigmoid()]
+
+        return nn.Sequential(*model)
+
+
+    def forward(self, input):
+        out = self.res_d(input)
+        return out
+
+class ResDiscriminator(nn.Module):
+    def __init__(self, in_channels=3, ndf=64, ndlayers=4, use_sigmoid=False):
+        super(ResDiscriminator, self).__init__()
+        self.res_d = self.make_model(in_channels, ndf, ndlayers, use_sigmoid)
+        self.fc_in_size = ndf*(2**ndlayers)
+
+        out_seq = [nn.Linear(self.fc_in_size, 1)]
+
+        if use_sigmoid:
+            out_seq += [nn.Sigmoid()]
+
+        self.fc = nn.Sequential(*out_seq)
+
+        # self.fc = nn.Sequential(nn.Linear(self.fc_in_size, 1), nn.Sigmoid())
+
+    def make_model(self, in_channels, ndf, ndlayers, use_sigmoid):
+        model = []
+        model += [OptimizedBlock(in_channels, ndf)]
+        tndf = ndf
+        downsample = True
+        for i in range(ndlayers):
+            model += [ResBlock(tndf, tndf*2, downsample=downsample)]
+            # downsample = not downsample
+            tndf *= 2
+        model += [nn.LeakyReLU(0.2, True)]
+
+        return nn.Sequential(*model)
+
+
+    def forward(self, input):
+        out = self.res_d(input)
+        out = F.avg_pool2d(out, out.size(3), stride=1)
+        out = out.view(-1, self.fc_in_size)
+
+        return self.fc(out)
+
+
+class GaussianNoise(nn.Module):
+    """Gaussian noise regularizer.
+
+    Args:
+        sigma (float, optional): relative standard deviation used to generate the
+            noise. Relative means that it will be multiplied by the magnitude of
+            the value your are adding the noise to. This means that sigma can be
+            the same regardless of the scale of the vector.
+        is_relative_detach (bool, optional): whether to detach the variable before
+            computing the scale of the noise. If `False` then the scale of the noise
+            won't be seen as a constant but something to optimize: this will bias the
+            network to generate vectors with smaller values.
+    """
+
+    def __init__(self, sigma=0.2, is_relative_detach=True):
+        super().__init__()
+        self.sigma = sigma
+        self.is_relative_detach = is_relative_detach
+        self.noise = torch.tensor(0).to(device)
+
+    def forward(self, x):
+        if self.training and self.sigma != 0:
+            scale = self.sigma * x.detach() if self.is_relative_detach else self.sigma * x
+            sampled_noise = self.noise.repeat(*x.size()).normal_() * scale
+            x = x + sampled_noise
+        return x
+
+ # Defines the PatchGAN/binary discriminator with the specified arguments.
+class NLayerDiscriminator(nn.Module):
+    def __init__(self, input_nc, ndf=64, n_layers=3, use_sigmoid=False, use_bias=False):
+        super(NLayerDiscriminator, self).__init__()
+
+        kw = 4
+        padw = 1
+        sequence = [
+            GaussianNoise(),
+            nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+            nn.LeakyReLU(0.2, True)
+        ]
+
+        nf_mult = 1
+        nf_mult_prev = 1
+        for n in range(1, n_layers):
+            nf_mult_prev = nf_mult
+            nf_mult = min(2**n, 8)
+            sequence += [
+                GaussianNoise(),
+                nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
+                          kernel_size=kw, stride=2, padding=padw, bias=use_bias),
+                nn.BatchNorm2d(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True)
+            ]
+
+        nf_mult_prev = nf_mult
+        nf_mult = min(2**n_layers, 8)
+        sequence += [
+            GaussianNoise(),
+            nn.Conv2d(ndf * nf_mult_prev, ndf * nf_mult,
+                      kernel_size=kw, stride=1, padding=padw, bias=use_bias),
+            nn.BatchNorm2d(ndf * nf_mult),
+            nn.LeakyReLU(0.2, True)
+        ]
+
+        #sequence += [nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)]
+
+        #if use_sigmoid:
+        #    sequence += [nn.Sigmoid()]
+
+        self.model = nn.Sequential(*sequence)
+
+        self.fc_in_size = ndf * nf_mult
+        self.fc = nn.Sequential(nn.Linear(self.fc_in_size, 1), nn.Sigmoid())
+
+
+    def forward(self, input):
+        out = self.model(input)
+        out = F.avg_pool2d(out, out.size(3), stride=1)
+        out = out.view(-1, self.fc_in_size)
+        return self.fc(out)
+
+
+# class Discriminator(nn.Module):
+#     def __init__(self, ngpu):
+#         super(Discriminator, self).__init__()
+#         self.ngpu = ngpu
+#         self.main = nn.Sequential(
+#             # input is (nc) x 64 x 64
+#             nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf) x 32 x 32
+#             nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 2),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*2) x 16 x 16
+#             nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 4),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*4) x 8 x 8
+#             nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
+#             nn.BatchNorm2d(ndf * 8),
+#             nn.LeakyReLU(0.2, inplace=True),
+#             # state size. (ndf*8) x 4 x 4
+#             nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
+#             nn.Sigmoid()
+#         )
+#
+#     def forward(self, input):
+#         return self.main(input)

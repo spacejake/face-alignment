@@ -121,6 +121,7 @@ def imshow(img):
     npimg = im_to_numpy(img).astype(np.uint8)
     plt.imshow(npimg)
     plt.axis('off')
+    plt.savefig('input.png')
 
 def show_joints(img, pts, outfn="2D-points.png"):
     imshow(img)
@@ -132,7 +133,7 @@ def show_joints(img, pts, outfn="2D-points.png"):
     plt.show()
     plt.savefig(outfn)
 
-def annotate_frame(frame, preds, face_dets=None):
+def annotate_frame(frame, preds, face_dets=None, fill=(255, 255, 255)):
     [h, w] = frame.shape[:2]
     pil_image = Image.fromarray(frame)
     draw_image = ImageDraw.Draw(pil_image, 'RGBA')
@@ -144,11 +145,14 @@ def annotate_frame(frame, preds, face_dets=None):
             if face_dets is not None:
                 face_det = face_dets[i]
                 draw_image.rectangle(face_det, outline=(255, 0, 0))
+                dx, dy = (face_det[2] - face_det[0]) / 2, (face_det[3] - face_det[1]) / 2
+                cx, cy = face_det[0]+dx, face_det[1]+dy
+                draw_image.point((cx, cy), fill=(255, 0, 0))
             for j in range(pred.shape[0]):
                 # d.point((pred[j,0],pred[j,1]), fill=255)
                 x, y = pred[j, 0], pred[j, 1]
                 draw_image.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, 0), outline=(255, 255, 255, 70))
-                draw_image.point((x, y), fill=(255, 255, 255))
+                draw_image.point((x, y), fill=fill)
 
     np_image = np.asarray(pil_image)
 

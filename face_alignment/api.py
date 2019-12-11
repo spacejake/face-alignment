@@ -62,6 +62,7 @@ models_urls = {
     'DAFAN-HMD-4': '',
     'DAFAN-HMD-d1.5-4': '',
     'DAFAN-MC-d1.5-4': '',
+    'DAFAN-eyes-4': '',
 }
 
 #models_chkpts = {
@@ -118,9 +119,9 @@ class FaceAlignment:
         self.face_alignment_net = FAN(network_size)
 
         if landmarks_type == LandmarksType._2D:
-            network_name = 'DAFAN-' + str(network_size)
+            network_name = 'DAFAN-eyes-' + str(network_size)
         else:
-            network_name = 'DAFAN-' + str(network_size)
+            network_name = 'DAFAN-eyes-' + str(network_size)
         
         fan_checkpoint = load_checkpoint(network_name)
         #fan_weights = fan_checkpoint['state_dict']
@@ -276,7 +277,7 @@ class FaceAlignment:
 
         landmarks = pts_img
 
-        return landmarks, pts
+        return landmarks #, pts
 
     def get_landmarks_from_directory(self, path, extensions=['.jpg', '.png'], recursive=True, show_progress_bar=True):
         detected_faces = self.face_detector.detect_from_directory(path, extensions, recursive, show_progress_bar)

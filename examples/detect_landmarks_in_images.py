@@ -18,7 +18,7 @@ fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size
 
 #directory = '../test/assets/LandmarkTests'
 #directory = '../test/assets/smallTest'
-# directory = '../test/assets/kinectTest'
+directory = '../test/assets/kinectTest'
 # directory = '../test/assets/jinwoong'
 # directory = '../test/assets/hmd'
 # directory = '../test/assets/MAFA'
@@ -28,9 +28,9 @@ fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._3D, network_size
 # directory = '../test/assets/yucheol/'
 # directory = '/workspace/dataset/HMD-DEMO/'
 # directory = './test-img/'
-directory = '../test/assets/ppt'
+# directory = '../test/assets/ppt'
 
-output_dir = './ppt/da-fan-4'
+output_dir = './da-fan-eyes-4'
 
 for idx, filename in enumerate(os.listdir(directory)):
     print('Found file {}'.format(os.path.join(directory, filename)))

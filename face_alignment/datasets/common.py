@@ -1,7 +1,13 @@
 import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
+import torch.utils.data as data
 import numpy as np
+import bisect
+
+import skimage
+import random
+import warnings
 
 from enum import Enum
 from typing import NamedTuple
@@ -15,13 +21,18 @@ class Split(Enum):
 
 class Target(NamedTuple):
     heatmap64: torch.tensor
-    heatmap256: torch.tensor
+    heatmap_eyes: torch.tensor
     pts: torch.tensor
     pts64: torch.tensor
     lap_pts: torch.tensor
     center: torch.tensor
     scale: torch.tensor
+    has_3d_anno: torch.tensor
+    has_2d_anno: torch.tensor
+    pts_2d: torch.tensor
 
+def boolToTensor(bool_val):
+    return torch.ones(1).byte() if bool_val else torch.zeros(1).byte()
 
 def compute_laplacian(laplacianMat, points):
     lap_pts = torch.matmul(laplacianMat, points)
@@ -77,6 +88,173 @@ class SpatialSoftmax(torch.nn.Module):
 
         return feature_keypoints
 
+
+def compute_laplacian(laplacianMat, points):
+    lap_pts = torch.matmul(laplacianMat, points)
+
+    return lap_pts
+
+def rand_bbox(size, lam):
+    W = size[2]
+    H = size[3]
+    cut_rat = 1.0 - np.sqrt(1.0-lam)
+    cut_w = np.int(W * cut_rat[0])
+    cut_h = np.int(H * cut_rat[1])
+
+    # TODO: add option for uniform and normal
+    # uniform
+    cx = np.random.randint(W)
+    cy = np.random.randint(H)
+
+    bbx1, bby1, bbx2, bby2 = gen_bbox((cut_w, cut_h), (cx, cy))
+
+    bbx1 = np.clip(bbx1, 0, W)
+    bby1 = np.clip(bby1, 0, H)
+    bbx2 = np.clip(bbx2, 0, W)
+    bby2 = np.clip(bby2, 0, H)
+
+    return bbx1, bby1, bbx2, bby2
+
+def gen_bbox(size, center):
+    cx, cy = center
+    w = size[0]
+    h = size[1]
+
+    bbx1 = int(cx - w // 2)
+    bby1 = int(cy - h // 2)
+    bbx2 = int(cx + w // 2)
+    bby2 = int(cy + h // 2)
+
+    return bbx1, bby1, bbx2, bby2
+
+def cutout(img, low=0.4, high=0.5):
+    # Perform cutout
+    lam = np.random.uniform(low, high, 2)
+    # TODO: use normal center like cutmix
+    bbx1, bby1, bbx2, bby2 = rand_bbox(img.unsqueeze(0).size(), lam)
+    img[:, bbx1:bbx2, bby1:bby2] = 0
+
+def eye_occlusion(img, center, low=0.4, high=0.6):
+    # Perform cutout
+    size = img.unsqueeze(0).size()
+    w_rat = np.random.normal(0.2, 0.01, 1)
+    h_rat = np.random.normal(0.6, 0.05, 1)
+    W = size[2]
+    H = size[3]
+    cut_w = np.int(W * w_rat)
+    cut_h = np.int(H * h_rat)
+
+    cx = center[1]
+    cy = center[0]
+
+    bbx1, bby1, bbx2, bby2 = gen_bbox((cut_w, cut_h), (cx, cy))
+
+    img[:, bbx1:bbx2, bby1:bby2] = 0
+
+def cutmix(img, cut_img, ratio=(0.2, 0.6), m=(310, 220), sigma=(40,50)):
+    # generate mixed sample
+
+    # make random box cut from cut_img
+    lam = np.random.uniform(ratio[0], ratio[1], 2)
+    cbbx1, cbby1, cbbx2, cbby2 = rand_bbox(img.unsqueeze(0).size(), lam)
+    cut_img = cut_img[..., cbbx1:cbbx2, cbby1:cbby2]
+
+    # Place in image, with normal distribution from face center
+    w, h = (cbbx2 - cbbx1), (cbby2 - cbby1)
+    rx, ry = w // 2, h // 2
+    ccx = (cbbx1 + cbbx2) // 2
+    ccy = (cbby1 + cbby2) // 2
+    cx_bounds = (rx, img.size(1) - rx - 1)
+    cy_bounds = (ry, img.size(2) - ry - 1)
+
+    cx = np.clip(int(np.random.normal(310, 40)), cx_bounds[0], cx_bounds[1])
+    cy = np.clip(int(np.random.normal(220, 50)), cy_bounds[0], cy_bounds[1])
+
+    dx = cx - ccx
+    dy = cy - ccy
+
+    bbx1 = dx + cbbx1
+    bby1 = dy + cbby1
+    bbx2 = dx + cbbx2
+    bby2 = dy + cbby2
+
+    img[..., bbx1:bbx2, bby1:bby2] = cut_img
+
+    return img
+
+class ConcatDataset(data.Dataset):
+    r"""Dataset as a concatenation of multiple datasets.
+
+    This class is useful to assemble different existing datasets.
+
+    Arguments:
+        datasets (sequence): List of datasets to be concatenated
+    """
+
+    @staticmethod
+    def cumsum(sequence):
+        r, s = [], 0
+        for e in sequence:
+            l = len(e)
+            r.append(l + s)
+            s += l
+        return r
+
+    def __init__(self, datasets):
+        super(ConcatDataset, self).__init__()
+        assert len(datasets) > 0, 'datasets should not be an empty iterable'
+        self.datasets = list(datasets)
+        # for d in self.datasets:
+        #     assert not isinstance(d, data.IterableDataset), "ConcatDataset does not support IterableDataset"
+        self.cumulative_sizes = self.cumsum(self.datasets)
+
+    def __len__(self):
+        return self.cumulative_sizes[-1]
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
+            idx = len(self) + idx
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        return self.datasets[dataset_idx][sample_idx]
+
+    @property
+    def cummulative_sizes(self):
+        warnings.warn("cummulative_sizes attribute is renamed to "
+                      "cumulative_sizes", DeprecationWarning, stacklevel=2)
+        return self.cumulative_sizes
+
+# class ChainDataset(data.IterableDataset):
+#     r"""Dataset for chainning multiple :class:`IterableDataset` s.
+#
+#     This class is useful to assemble different existing dataset streams. The
+#     chainning operation is done on-the-fly, so concatenating large-scale
+#     datasets with this class will be efficient.
+#
+#     Arguments:
+#         datasets (iterable of IterableDataset): datasets to be chained together
+#     """
+#     def __init__(self, datasets):
+#         super(ChainDataset, self).__init__()
+#         self.datasets = datasets
+#
+#     def __iter__(self):
+#         for d in self.datasets:
+#             assert isinstance(d, data.IterableDataset), "ChainDataset only supports IterableDataset"
+#             for x in d:
+#                 yield x
+#
+#     def __len__(self):
+#         total = 0
+#         for d in self.datasets:
+#             assert isinstance(d, data.IterableDataset), "ChainDataset only supports IterableDataset"
+#             total += len(d)
+#         return total
 
 if __name__ == '__main__':
     from face_alignment.utils import draw_gaussian, draw_gaussianv2

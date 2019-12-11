@@ -6,6 +6,7 @@ import os
 def argparser():
     P = argparse.ArgumentParser(description='Train network script')
     P.add_argument('--data', type=str, default='data/300W_LP', help='path to dataset')
+    P.add_argument('--data-eyes', type=str, default='data/WFLW', help='path to eye anno dataset')
     P.add_argument('--seed', type=int, default=0, help='maunlly set RNG seed')
     P.add_argument('--nGpu', type=int, default=1, help='number of gpu(s) to use')
     P.add_argument('--devices',  type=int, nargs='+', help='list ids (int) of gpu(s) to use')
@@ -14,9 +15,11 @@ def argparser():
     P.add_argument('--workers', type=int, default=4, help='number of data loader threads')
     # for a single GPU.
     P.add_argument('--train-batch', type=int, default=10, help='minibatch size')
+    P.add_argument('--eye-batch', type=int, default=10, help='minibatch size')
     P.add_argument('--val-batch', type=int, default=6, help='minibatch size')
     P.add_argument('-c', '--checkpoint', type=str, default='checkpoint', help='model save path')
     P.add_argument('--resume', type=str, default='', help='resume from lastest saved FAN checkpoints')
+    P.add_argument('--resume-gan', type=str, default='', help='resume from lastest saved Discriminator checkpoints')
     P.add_argument('--resume-depth', type=str, default='', help='resume from lastest saved Depth checkpoints')
     P.add_argument('--pretrained', action='store_true', help='Use pretrained Network')
 
@@ -48,6 +51,9 @@ def argparser():
     P.add_argument('--device', type=str, default='cuda:0', help='device to load and run model')
     P.add_argument('--train-fan', help='Specifically train FAN', action='store_true')
     P.add_argument('--train-depth', help='Specifically train Depth', action='store_true')
+
+    # WFLW 68 landmark annotation generation. Generates a .mat file for each sample
+    P.add_argument('--anno-output-dir', type=str, default='data/WFLW/WFLW_annotations', help='output path of generated dataset annotation')
     args = P.parse_args()
 
     return args
